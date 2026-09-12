@@ -1,0 +1,13 @@
+{
+  "name": "tiktok-enhanced-autolike",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node tools/build.mjs",
+    "test": "node --experimental-strip-types --test tests/autolike/logic.test.ts tests/userscript/runtime.test.ts"
+  }
+}

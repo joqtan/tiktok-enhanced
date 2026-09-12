@@ -1,0 +1,9 @@
+# Local Pi runtime state
+.atl/
+.codegraph/
+
+# Dependencies
+node_modules/
+
+# Userscript build output
+dist/
