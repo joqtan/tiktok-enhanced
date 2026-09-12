@@ -8,6 +8,6 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node tools/build.mjs",
-    "test": "node --experimental-strip-types --test tests/autolike/logic.test.ts tests/userscript/runtime.test.ts"
+    "test": "node --experimental-strip-types --test tests/autolike/logic.test.ts tests/userscript/runtime.test.ts tests/userscript/floating-widget.test.ts"
   }
 }
