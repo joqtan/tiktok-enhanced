@@ -14,7 +14,13 @@ patterns, and statistics. It intentionally excludes UI, userscript metadata,
 page bootstrap, and other runtime-specific concerns.
 
 The Tampermonkey adapter lives separately at `src/userscript/index.ts`. It
-provides DOM and timer adapters and starts the engine on TikTok `/live` pages.
+provides DOM and timer adapters, starts the engine on TikTok live pages, and
+mounts the draggable floating module widget.
+
+The widget currently provides the Autolike module with pause/resume, mode
+selection, live counters, an expandable settings area, and TikTok-inspired
+cyan/pink accents. Its position and active module are persisted in
+`localStorage`; drag it to any visible position and reload the page to restore it.
 
 ## Development and build
 
@@ -38,7 +44,8 @@ changes, then install or update the generated file in Tampermonkey:
 1. Open Tampermonkey and choose **Create a new script**.
 2. Replace the editor contents with `dist/tiktok-enhanced.user.js`.
 3. Save the script and enable it.
-4. Open a TikTok live page (`https://www.tiktok.com/live/...`) to run it.
+4. Open a TikTok live page (`https://www.tiktok.com/@creator/live`) to run it.
+5. Use the floating Autolike widget to pause/resume, change modes, and open settings.
 
 The userscript uses `@grant none` and does not include the upstream UI or
 userscript wholesale.
