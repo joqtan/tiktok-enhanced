@@ -1,0 +1,80 @@
+// Derived from AmpedWasTaken/TikTok-Live-Liker (MIT); see THIRD_PARTY_NOTICES.md.
+
+import { MODES, nextDelay, randomInteger } from './config.ts';
+import type { DebugConfig, Mode } from './config.ts';
+import { dispatchLikeClick } from './detector.ts';
+import type { LikeButtonElement, DetectorEnvironment } from './detector.ts';
+import { StatisticsTracker } from './statistics.ts';
+
+export interface Timer { set(callback: () => void, delay: number): unknown; clear(id: unknown): void; }
+export interface ClickEngineDependencies {
+  findButton(): LikeButtonElement | null; browser: DetectorEnvironment; timer: Timer;
+  random?: () => number; now?: () => number; stats?: StatisticsTracker;
+  notify?(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void;
+}
+
+export class AutoLikeEngine {
+  private enabled = false; private missingButtonDelay = 250;
+  private readonly random: () => number; private readonly now: () => number;
+  private readonly stats: StatisticsTracker; private readonly pending = new Set<unknown>();
+  private comboTimeoutId: unknown = null; private readonly deps: ClickEngineDependencies;
+  private mode: Mode; private debugConfig: DebugConfig;
+  constructor(deps: ClickEngineDependencies, mode: Mode = 'normal', debugConfig: DebugConfig) {
+    this.deps = deps; this.mode = mode; this.debugConfig = debugConfig;
+    this.random = deps.random ?? Math.random; this.now = deps.now ?? Date.now;
+    this.stats = deps.stats ?? new StatisticsTracker(this.now);
+  }
+  get statistics(): StatisticsTracker { return this.stats; }
+  setMode(mode: Mode): void { this.mode = mode; }
+  setDebugConfig(config: DebugConfig): void { this.debugConfig = config; }
+  start(): void { if (!this.enabled) { this.enabled = true; void this.clickLikeButton(); } }
+  stop(): void {
+    this.enabled = false; for (const id of this.pending) this.deps.timer.clear(id); this.pending.clear();
+    if (this.comboTimeoutId !== null) { this.deps.timer.clear(this.comboTimeoutId); this.comboTimeoutId = null; }
+  }
+  private record(success: boolean): void {
+    this.stats.record(success);
+    if (!success) { if (this.comboTimeoutId !== null) this.deps.timer.clear(this.comboTimeoutId); this.comboTimeoutId = null; return; }
+    if (this.comboTimeoutId !== null) this.deps.timer.clear(this.comboTimeoutId);
+    this.comboTimeoutId = this.deps.timer.set(() => { this.comboTimeoutId = null; this.stats.finishCombo(); }, MODES.combo.comboTimeout!);
+  }
+  private schedule(callback: () => void, delay: number): void {
+    let id: unknown; id = this.deps.timer.set(() => { this.pending.delete(id); callback(); }, delay); this.pending.add(id);
+  }
+  private retry(): void {
+    this.record(false); this.schedule(() => void this.clickLikeButton(), this.missingButtonDelay);
+    this.missingButtonDelay = Math.min(this.missingButtonDelay * 2, 5000);
+  }
+  private async wait(delay: number): Promise<void> { await new Promise<void>(resolve => this.schedule(resolve, delay)); }
+  private async burst(button: LikeButtonElement, count: number): Promise<boolean> {
+    for (let i = 0; i < count && this.enabled; i++) {
+      if (!dispatchLikeClick(button, this.deps.browser)) return false;
+      this.record(true); if (i < count - 1 && this.enabled) await this.wait(MODES.combo.burstDelay!);
+    }
+    return true;
+  }
+  private extra(button: LikeButtonElement, remaining: number): void {
+    if (remaining <= 0) return;
+    this.schedule(() => { if (!this.enabled) return;
+      if (dispatchLikeClick(button, this.deps.browser)) { this.record(true); this.extra(button, remaining - 1); }
+      else this.record(false);
+    }, randomInteger(this.random, 40, 130));
+  }
+  private async clickLikeButton(): Promise<void> {
+    const button = this.deps.findButton(); if (!button) { this.retry(); return; }
+    this.missingButtonDelay = 250;
+    if (this.mode === 'combo') {
+      if (!await this.burst(button, MODES.combo.burstCount)) { this.retry(); return; }
+    } else {
+      if (!dispatchLikeClick(button, this.deps.browser)) { this.retry(); return; }
+      this.record(true);
+      if (this.mode === 'human' || this.mode === 'debug') {
+        const config = this.mode === 'debug' ? this.debugConfig : MODES.human;
+        const roll = this.random();
+        if (roll < config.tripleTapChance!) this.extra(button, 2);
+        else if (roll < config.tripleTapChance! + config.doubleTapChance!) this.extra(button, 1);
+      }
+    }
+    if (this.enabled) this.schedule(() => void this.clickLikeButton(), nextDelay(this.mode, this.debugConfig, this.random));
+  }
+}
