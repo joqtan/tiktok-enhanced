@@ -4,6 +4,8 @@ import { COMBO_TIMEOUT, MODES, nextDelay, randomInteger } from './config.ts';
 import type { DebugConfig, Mode, ModeConfig } from './config.ts';
 import { dispatchLikeClick } from './detector.ts';
 import type { LikeButtonElement, DetectorEnvironment } from './detector.ts';
+import type { Timer, LikeDispatcher } from './contract.ts';
+export type { Timer } from './contract.ts';
 import { StatisticsTracker } from './statistics.ts';
 
 export type EngineStatus = 'stopped' | 'running' | 'unavailable';
@@ -22,14 +24,11 @@ export interface EngineDiagnostic {
   readonly details?: Readonly<Record<string, string | number | boolean>>;
 }
 
-export interface Timer {
-  set(callback: () => void, delay: number): unknown;
-  clear(id: unknown): void;
-}
-
 export interface ClickEngineDependencies {
   findButton(): LikeButtonElement | null;
-  browser: DetectorEnvironment;
+  /** Preferred injected click adapter. `browser` remains supported for compatibility. */
+  clickButton?: LikeDispatcher;
+  browser?: DetectorEnvironment;
   timer: Timer;
   random?: () => number;
   now?: () => number;
@@ -202,7 +201,9 @@ export class AutoLikeEngine {
 
     let success: boolean;
     try {
-      success = dispatchLikeClick(button, this.deps.browser);
+      success = this.deps.clickButton
+          ? this.deps.clickButton(button)
+          : this.deps.browser ? dispatchLikeClick(button, this.deps.browser) : false;
     } catch {
       this.diagnostic({ code: 'detector-error', message: 'Like button dispatch failed' });
       success = false;
@@ -238,7 +239,9 @@ export class AutoLikeEngine {
         randomInteger(this.random, config.extraMinDelay, config.extraMaxDelay),
         generation,
       );
-      const extraSuccess = dispatchLikeClick(button, this.deps.browser);
+      const extraSuccess = this.deps.clickButton
+            ? this.deps.clickButton(button)
+            : this.deps.browser ? dispatchLikeClick(button, this.deps.browser) : false;
       this.record(extraSuccess, true);
       if (!extraSuccess) break;
     }

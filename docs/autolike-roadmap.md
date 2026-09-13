@@ -15,10 +15,10 @@ This roadmap keeps Autolike safe, predictable, testable, and independent from UI
 |---|---|---|---|
 | 1 | Continuous integration | Tests and production builds run automatically | ✅ Merged (PRs #4 and #5) |
 | 2 | Safe live entry | Every live starts stopped; no automatic resume | ✅ Merged (PR #7) |
-| 3 | Rate limiting and pacing | Clicks remain human-like and bounded | 🔶 Implemented; PR pending |
-| 4 | Lifecycle hardening | Timers, retries, observers, and sessions are cleaned up | 🔶 Phases one and two completed; deferred items listed below |
-| 5 | Observability | Users and maintainers can understand Autolike behavior | 🔶 Implemented; PR pending |
-| 6 | Shared module contract | New features can reuse stable runtime and UI boundaries | Planned |
+| 3 | Rate limiting and pacing | Clicks remain human-like and bounded | ✅ Merged (PR #11) |
+| 4 | Lifecycle hardening | Timers, retries, observers, and sessions are cleaned up | ✅ Core session lifecycle complete |
+| 5 | Observability | Users and maintainers can understand Autolike behavior | ✅ Merged (PR #13) |
+| 6 | Shared module contract | New features can reuse stable runtime and UI boundaries | ✅ Implemented |
 | 7 | Second low-risk module | Expand the product without destabilizing Autolike | Planned |
 | 8 | Distribution | Version, package, and publish the extension reliably | Planned |
 
@@ -60,9 +60,9 @@ The engine now exposes stopped, running, and unavailable status, with stopped co
 
 Focused coverage includes status transitions, unavailable recovery, retry exhaustion, detector errors, cancellation diagnostics, and expanded widget counters. A separate paused state remains deferred until the runtime distinguishes pausing from stopping.
 
-## 6. Shared module contract
+## 6. Shared module contract — implementation complete
 
-Define boundaries for core scheduling/state, DOM/timer/storage adapters, UI, and runtime route lifecycle before adding unrelated features.
+The module boundary is now explicit across reusable core scheduling/state, injected DOM/timer/storage adapters, module UI, and runtime route/session lifecycle. Strict contracts are exported from `src/autolike/contract.ts`, browser wiring is composed at the userscript boundary, and the contract is documented in [`docs/module-contract.md`](./module-contract.md). The implementation preserves Autolike behavior while keeping future modules from depending on browser globals or runtime internals.
 
 ## 7. Add a second, lower-risk module
 
@@ -77,10 +77,10 @@ Document local validation, versioning, packaging, release checks, and preservati
 1. ✅ Merge CI (point 1; PRs #4 and #5).
 2. ✅ Deliver safe live entry (point 2; PR #7).
 3. ✅ Complete lifecycle hardening phases one and two (point 4; commit `8d54b76`).
-4. ✅ Implement rate limiting and human-like pacing (point 3; PR pending).
-5. Complete the deferred lifecycle foundations when observers or new asynchronous adapters are introduced (point 4).
+4. ✅ Merge rate limiting and human-like pacing (point 3; PR #11).
+5. ✅ Complete core lifecycle hardening (point 4). Observer-specific cleanup will be added with DOM observation.
 6. ✅ Implement observability and user feedback (point 5).
-7. Extract the shared module contract (point 6).
+7. ✅ Extract the shared module contract (point 6).
 8. Implement one low-risk second module (point 7).
 9. Prepare distribution and release workflow (point 8).
 
