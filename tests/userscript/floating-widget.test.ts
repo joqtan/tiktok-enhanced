@@ -64,7 +64,7 @@ function setup(saved?: string, savedMode?: string, storageFailure = false) {
     modes: [] as string[], starts: 0, stops: 0,
     setMode: (mode: string) => { engine.modes.push(mode); },
         start: () => { engine.starts++; }, stop: () => { engine.stops++; },
-    statistics: { stats: { totalClicks: 0, successfulClicks: 0, failedClicks: 0, currentCombo: 0, maxCombo: 0 } },
+    status: 'stopped' as const, statistics: { stats: { totalClicks: 0, successfulClicks: 0, failedClicks: 0, skippedClicks: 2, retries: 3, multiTaps: 4, combos: 5, currentCombo: 0, maxCombo: 6 } },
   };
   const widget = new FloatingWidget({ document: document as never, window: window as never, storage, timer, engine: engine as never });
   return { widget, documentEvents, windowEvents, elementEvents, modeControl, storage, values, engine, window, get removed() { return removed; }, get cleared() { return cleared; } };
@@ -108,7 +108,7 @@ for (const mode of VISIBLE_MODES) {
 
 test('enters stopped and starts only after the explicit control action', () => {
       const app = setup();
-      assert.match(app.widget.element.innerHTML, />Paused</);
+      assert.match(app.widget.element.innerHTML, />Stopped</);
       app.elementEvents.dispatch('click', {});
       assert.equal(app.engine.starts, 1);
       assert.equal(app.engine.stops, 0);

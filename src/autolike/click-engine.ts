@@ -6,6 +6,22 @@ import { dispatchLikeClick } from './detector.ts';
 import type { LikeButtonElement, DetectorEnvironment } from './detector.ts';
 import { StatisticsTracker } from './statistics.ts';
 
+export type EngineStatus = 'stopped' | 'running' | 'unavailable';
+export type EngineDiagnosticCode =
+  | 'started'
+  | 'stopped'
+  | 'unavailable'
+  | 'recovered'
+  | 'retry-exhausted'
+  | 'detector-error'
+  | 'cancelled-work';
+
+export interface EngineDiagnostic {
+  readonly code: EngineDiagnosticCode;
+  readonly message: string;
+  readonly details?: Readonly<Record<string, string | number | boolean>>;
+}
+
 export interface Timer {
   set(callback: () => void, delay: number): unknown;
   clear(id: unknown): void;
@@ -19,10 +35,13 @@ export interface ClickEngineDependencies {
   now?: () => number;
   stats?: StatisticsTracker;
   notify?(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void;
+  onStatusChange?(status: EngineStatus): void;
+  onDiagnostic?(diagnostic: EngineDiagnostic): void;
 }
 
 export class AutoLikeEngine {
   private enabled = false;
+  private currentStatus: EngineStatus = 'stopped';
   private readonly random: () => number;
   private readonly stats: StatisticsTracker;
   private readonly pending = new Set<unknown>();
@@ -32,16 +51,16 @@ export class AutoLikeEngine {
   private mode: Mode;
   private debugConfig: DebugConfig;
 
-  constructor(
-    deps: ClickEngineDependencies,
-    mode: Mode = 'natural',
-    debugConfig: DebugConfig,
-  ) {
+  constructor(deps: ClickEngineDependencies, mode: Mode = 'natural', debugConfig: DebugConfig) {
     this.deps = deps;
     this.mode = mode;
     this.debugConfig = debugConfig;
     this.random = deps.random ?? Math.random;
     this.stats = deps.stats ?? new StatisticsTracker(deps.now ?? Date.now);
+  }
+
+  get status(): EngineStatus {
+    return this.currentStatus;
   }
 
   get statistics(): StatisticsTracker {
@@ -60,10 +79,14 @@ export class AutoLikeEngine {
     if (this.enabled) return;
     this.enabled = true;
     const generation = ++this.sessionGeneration;
+    this.setStatus('running');
+    this.diagnostic({ code: 'started', message: 'Autolike engine started' });
     void this.runCycle(generation, 0, 0, 0);
   }
 
   stop(): void {
+    if (!this.enabled && this.currentStatus === 'stopped') return;
+    const hadWork = this.pending.size > 0 || this.comboTimeoutId !== null;
     this.enabled = false;
     ++this.sessionGeneration;
     for (const id of this.pending) this.deps.timer.clear(id);
@@ -72,6 +95,21 @@ export class AutoLikeEngine {
       this.deps.timer.clear(this.comboTimeoutId);
       this.comboTimeoutId = null;
     }
+    if (hadWork) {
+      this.diagnostic({ code: 'cancelled-work', message: 'Pending autolike work was cancelled' });
+    }
+    this.setStatus('stopped');
+    this.diagnostic({ code: 'stopped', message: 'Autolike engine stopped' });
+  }
+
+  private diagnostic(diagnostic: EngineDiagnostic): void {
+    this.deps.onDiagnostic?.(diagnostic);
+  }
+
+  private setStatus(status: EngineStatus): void {
+    if (this.currentStatus === status) return;
+    this.currentStatus = status;
+    this.deps.onStatusChange?.(status);
   }
 
   private config(): ModeConfig {
@@ -95,11 +133,7 @@ export class AutoLikeEngine {
     }, COMBO_TIMEOUT);
   }
 
-  private schedule(
-    callback: () => void,
-    delay: number,
-    generation = this.sessionGeneration,
-  ): void {
+  private schedule(callback: () => void, delay: number, generation = this.sessionGeneration): void {
     let id: unknown;
     id = this.deps.timer.set(() => {
       this.pending.delete(id);
@@ -113,13 +147,12 @@ export class AutoLikeEngine {
   }
 
   private scheduleNext(generation: number): void {
-    if (this.enabled && generation === this.sessionGeneration) {
-      this.schedule(
-        () => void this.runCycle(generation, 0, 0, 0),
-        nextDelay(this.mode, this.debugConfig, this.random),
-        generation,
-      );
-    }
+    if (!this.enabled || generation !== this.sessionGeneration) return;
+    this.schedule(
+      () => void this.runCycle(generation, 0, 0, 0),
+      nextDelay(this.mode, this.debugConfig, this.random),
+      generation,
+    );
   }
 
   private async runCycle(
@@ -129,17 +162,30 @@ export class AutoLikeEngine {
     work: number,
   ): Promise<void> {
     if (!this.enabled || generation !== this.sessionGeneration) return;
-
     const config = this.config();
     if (work >= config.maxWorkPerCycle || clicks >= config.maxClicksPerCycle) {
       this.scheduleNext(generation);
       return;
     }
 
-    const button = this.deps.findButton();
+    let button: LikeButtonElement | null;
+    try {
+      button = this.deps.findButton();
+    } catch {
+      this.diagnostic({ code: 'detector-error', message: 'Like button detection failed' });
+      button = null;
+    }
+
     if (!button) {
+      this.setStatus('unavailable');
       this.stats.recordSkip();
+      this.diagnostic({ code: 'unavailable', message: 'Like button is unavailable' });
       if (retries >= config.maxRetries || work + 1 >= config.maxWorkPerCycle) {
+        this.diagnostic({
+          code: 'retry-exhausted',
+          message: 'Like button was unavailable after retries',
+          details: { retries },
+        });
         this.scheduleNext(generation);
         return;
       }
@@ -149,10 +195,26 @@ export class AutoLikeEngine {
       return;
     }
 
-    const success = dispatchLikeClick(button, this.deps.browser);
+    if (this.currentStatus === 'unavailable') {
+      this.setStatus('running');
+      this.diagnostic({ code: 'recovered', message: 'Like button became available' });
+    }
+
+    let success: boolean;
+    try {
+      success = dispatchLikeClick(button, this.deps.browser);
+    } catch {
+      this.diagnostic({ code: 'detector-error', message: 'Like button dispatch failed' });
+      success = false;
+    }
     this.record(success);
     if (!success) {
       if (retries >= config.maxRetries || work + 1 >= config.maxWorkPerCycle) {
+        this.diagnostic({
+          code: 'retry-exhausted',
+          message: 'Like click retries exhausted',
+          details: { retries },
+        });
         this.scheduleNext(generation);
         return;
       }
@@ -171,7 +233,6 @@ export class AutoLikeEngine {
       config.maxClicksPerCycle - clicks - 1,
       config.maxWorkPerCycle - work - 1,
     );
-
     for (let extra = 0; extra < extraCount; extra++) {
       await this.wait(
         randomInteger(this.random, config.extraMinDelay, config.extraMaxDelay),
