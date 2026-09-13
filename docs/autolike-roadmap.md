@@ -15,7 +15,7 @@ This roadmap keeps Autolike safe, predictable, testable, and independent from UI
 |---|---|---|---|
 | 1 | Continuous integration | Tests and production builds run automatically | ✅ Merged (PRs #4 and #5) |
 | 2 | Safe live entry | Every live starts stopped; no automatic resume | ✅ Merged (PR #7) |
-| 3 | Rate limiting and pacing | Clicks remain human-like and bounded | 🔜 Next PR |
+| 3 | Rate limiting and pacing | Clicks remain human-like and bounded | 🔶 Implemented; PR pending |
 | 4 | Lifecycle hardening | Timers, retries, observers, and sessions are cleaned up | 🔶 Phases one and two completed; deferred items listed below |
 | 5 | Observability | Users and maintainers can understand Autolike behavior | Planned |
 | 6 | Shared module contract | New features can reuse stable runtime and UI boundaries | Planned |
@@ -30,15 +30,13 @@ The runtime now mounts every live entry with the widget stopped. The mode is res
 
 Focused coverage includes initial stopped entry behavior at the widget boundary, explicit start/stop controls, reload-like fresh initialization, live path detection, and repeated teardown.
 
-## 3. Rate limiting and human-like pacing
+## 3. Rate limiting and human-like pacing — implementation complete
 
 **Objective:** make click scheduling bounded, understandable, and resistant to accidental bursts.
 
-- Preserve randomized delays for every mode.
-- Keep multi-tap behavior probabilistic and bounded.
-- Add explicit limits for retries, click bursts, and work per scheduling cycle.
-- Ensure a pause cannot be bypassed by a retry path.
-- Account for clicks, multi-taps, skips, retries, and failures consistently.
+The engine now preserves randomized delays for regular and debug modes, serializes probabilistic multi-taps within each scheduling cycle, and prevents them from overlapping the next cycle. Retry attempts, clicks per cycle, and total work per cycle have explicit safe limits. Retry paths use the same randomized pacing policy, including configured pauses, rather than bypassing it. Statistics distinguish attempted clicks, multi-taps, skips, retries, and failures; missing-button skips are no longer counted as failed click attempts.
+
+Focused coverage includes retry exhaustion and cancellation, retry pause pacing, cycle work limits, bounded multi-taps, stale asynchronous work, safe limit normalization, and consistent statistics accounting. The implementation is ready for the next reviewable pull request.
 
 ## 4. Browser lifecycle hardening — phase one completed
 
@@ -77,7 +75,7 @@ Document local validation, versioning, packaging, release checks, and preservati
 1. ✅ Merge CI (point 1; PRs #4 and #5).
 2. ✅ Deliver safe live entry (point 2; PR #7).
 3. ✅ Complete lifecycle hardening phases one and two (point 4; commit `8d54b76`).
-4. Harden pacing, retries, and cancellation (point 3; next PR).
+4. ✅ Implement rate limiting and human-like pacing (point 3; PR pending).
 5. Complete the deferred lifecycle foundations when observers or new asynchronous adapters are introduced (point 4).
 6. Improve observability and statistics (point 5).
 7. Extract the shared module contract (point 6).
