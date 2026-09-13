@@ -19,90 +19,111 @@ export function isLivePath(pathname: string): boolean {
   return pathname === '/live' || pathname.startsWith('/live/') || /^\/@[^/]+\/live\/?$/.test(pathname);
 }
 
-function createBrowserEnvironment(): DetectorEnvironment {
-  const searchRoot = document as unknown as SearchRoot;
+function createBrowserEnvironment(documentRef: Document, windowRef: Window): DetectorEnvironment {
+  const searchRoot = documentRef as unknown as SearchRoot;
   return {
     document: searchRoot,
-    getComputedStyle: (element: LikeButtonElement) => window.getComputedStyle(element as unknown as Element),
-    createClickEvent: () => new MouseEvent('click', { bubbles: true, cancelable: true, view: window }),
+    getComputedStyle: (element: LikeButtonElement) => windowRef.getComputedStyle(element as unknown as Element),
+    createClickEvent: () => new MouseEvent('click', { bubbles: true, cancelable: true, view: windowRef }),
     logError: (message, error) => console.error(`[tiktok-enhanced] ${message}`, error),
   };
 }
 
-let activeEngine: AutoLikeEngine | null = null;
-let activeWidget: FloatingWidget | null = null;
-let lifecycleInstalled = false;
-let originalPushState: typeof history.pushState | null = null;
-let originalReplaceState: typeof history.replaceState | null = null;
-
-function syncAutolikeRoute(): void {
-  if (isLivePath(window.location.pathname)) startAutolike(); else destroyAutolike();
+export interface AutolikeRuntimeOptions {
+  window: Window;
+  document: Document;
+  createEngine?: () => AutoLikeEngine;
+  createWidget?: (engine: AutoLikeEngine) => FloatingWidget;
 }
 
-function installLifecycle(): void {
-  if (lifecycleInstalled) return;
-  lifecycleInstalled = true;
-  window.addEventListener('popstate', syncAutolikeRoute);
-  window.addEventListener('hashchange', syncAutolikeRoute);
-  originalPushState = window.history.pushState;
-  originalReplaceState = window.history.replaceState;
-  for (const method of ['pushState', 'replaceState'] as const) {
-    const original = window.history[method];
-    window.history[method] = function (this: History, ...args: Parameters<typeof original>): ReturnType<typeof original> {
-      const result = original.apply(this, args);
-      syncAutolikeRoute();
-      return result;
-    } as typeof original;
-  }
-}
+/**
+ * Owns one engine/widget session and replaces it at every live route entry.
+ * A replacement receives a new engine, so its statistics are route-scoped.
+ */
+export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
+  let activeEngine: AutoLikeEngine | null = null;
+  let activeWidget: FloatingWidget | null = null;
+  let installed = false;
+  let originalPushState: typeof options.window.history.pushState | null = null;
+  let originalReplaceState: typeof options.window.history.replaceState | null = null;
 
-function uninstallLifecycle(): void {
-  if (!lifecycleInstalled) return;
-  window.removeEventListener('popstate', syncAutolikeRoute);
-  window.removeEventListener('hashchange', syncAutolikeRoute);
-  if (originalPushState) window.history.pushState = originalPushState;
-  if (originalReplaceState) window.history.replaceState = originalReplaceState;
-  originalPushState = null; originalReplaceState = null; lifecycleInstalled = false;
-}
-
-export function startAutolike(): AutoLikeEngine | null {
-  if (!isLivePath(window.location.pathname)) { destroyAutolike(); return null; }
-  activeEngine?.stop();
-  activeWidget?.destroy();
-  const browser = createBrowserEnvironment();
-  const engine = new AutoLikeEngine(
-    { findButton: createButtonFinder(browser), browser, timer: {
-      set: (callback, delay) => window.setTimeout(callback, delay),
-      clear: (id) => window.clearTimeout(id as number),
-    } },
-    'natural',
-    DEBUG_CONFIG_DEFAULTS,
-  );
-  // Live entry is deliberately stopped; the widget is the explicit start boundary.
-  activeWidget = createFloatingWidget({
-    document, window, storage: getStorage(), engine, initiallyRunning: false,
+  const createEngine = options.createEngine ?? (() => {
+    const browser = createBrowserEnvironment(options.document, options.window);
+    return new AutoLikeEngine(
+      { findButton: createButtonFinder(browser), browser, timer: {
+        set: (callback, delay) => options.window.setTimeout(callback, delay),
+        clear: (id) => options.window.clearTimeout(id as number),
+      } }, 'natural', DEBUG_CONFIG_DEFAULTS,
+    );
   });
-  activeEngine = engine;
-  return engine;
+  const createWidget = options.createWidget ?? ((engine: AutoLikeEngine) => createFloatingWidget({
+    document: options.document, window: options.window, storage: getStorage(options.window), engine, initiallyRunning: false,
+  }));
+
+  function destroy(): void {
+    const engine = activeEngine;
+    const widget = activeWidget;
+    activeEngine = null;
+    activeWidget = null;
+    engine?.stop();
+    widget?.destroy();
+  }
+
+  function start(): AutoLikeEngine | null {
+    if (!isLivePath(options.window.location.pathname)) { destroy(); return null; }
+    destroy();
+    const engine = createEngine();
+    activeWidget = createWidget(engine);
+    activeEngine = engine;
+    return engine;
+  }
+
+  function sync(): void { if (isLivePath(options.window.location.pathname)) start(); else destroy(); }
+
+  function install(): void {
+    if (installed) return;
+    installed = true;
+    options.window.addEventListener('popstate', sync);
+    options.window.addEventListener('hashchange', sync);
+    originalPushState = options.window.history.pushState;
+    originalReplaceState = options.window.history.replaceState;
+    for (const method of ['pushState', 'replaceState'] as const) {
+      const original = options.window.history[method];
+      options.window.history[method] = function (this: History, ...args: Parameters<typeof original>): ReturnType<typeof original> {
+        const result = original.apply(this, args);
+        sync();
+        return result;
+      } as typeof original;
+    }
+  }
+
+  function uninstall(): void {
+    if (!installed) return;
+    options.window.removeEventListener('popstate', sync);
+    options.window.removeEventListener('hashchange', sync);
+    if (originalPushState) options.window.history.pushState = originalPushState;
+    if (originalReplaceState) options.window.history.replaceState = originalReplaceState;
+    originalPushState = null;
+    originalReplaceState = null;
+    installed = false;
+  }
+
+  return { start, destroy, sync, install, uninstall, get engine() { return activeEngine; }, get widget() { return activeWidget; } };
 }
 
-function getStorage(): Storage | undefined {
-  try { return window.localStorage; } catch { return undefined; }
+function getStorage(windowRef: Window): Storage | undefined {
+  try { return windowRef.localStorage; } catch { return undefined; }
 }
+
+let runtime: ReturnType<typeof createAutolikeRuntime> | null = null;
+if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  runtime = createAutolikeRuntime({ window, document });
+  runtime.install();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { runtime?.start(); }, { once: true });
+  else runtime.start();
+}
+
+export function startAutolike(): AutoLikeEngine | null { return runtime?.start() ?? null; }
 
 /** Stop the runtime and remove the floating widget when the userscript is unloaded. */
-export function destroyAutolike(): void {
-  activeEngine?.stop();
-  activeEngine = null;
-  activeWidget?.destroy();
-  activeWidget = null;
-}
-
-if (typeof document !== 'undefined' && typeof window !== 'undefined') {
-  installLifecycle();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { startAutolike(); }, { once: true });
-  } else {
-    startAutolike();
-  }
-}
+export function destroyAutolike(): void { runtime?.destroy(); }

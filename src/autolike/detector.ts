@@ -16,6 +16,7 @@ export interface LikeButtonElement {
 export interface SearchRoot {
   querySelectorAll(selector: string): Iterable<LikeButtonElement>;
   getElementsByClassName(className: string): Iterable<LikeButtonElement>;
+  contains?(element: LikeButtonElement): boolean;
 }
 
 export interface DetectorEnvironment {
@@ -66,7 +67,7 @@ export function createButtonFinder(env: DetectorEnvironment): () => LikeButtonEl
   };
   return () => {
     try {
-      if (root && !root.isConnected) root = null;
+      if (root && (!root.isConnected || env.document.contains?.(root) === false)) root = null;
       const focused = root || env.document;
       let button = visibleE2e(focused);
       if (button) { root = button.closest(`.${BUTTON_SELECTORS.container}`); return button; }
