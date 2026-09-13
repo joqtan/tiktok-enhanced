@@ -196,6 +196,32 @@ test('bounds multi-taps to one scheduling cycle', async () => {
   engine.stop();
 });
 
+test('reports status transitions and structured unavailable recovery diagnostics', async () => {
+      const harness = timerHarness(); const target = button(); let lookups = 0;
+      const statuses: string[] = []; const diagnostics: string[] = [];
+      const engine = new AutoLikeEngine({
+        findButton: () => lookups++ === 0 ? null : target, browser: detector([target]), timer: harness.timer, random: () => 0,
+        onStatusChange: status => statuses.push(status), onDiagnostic: diagnostic => diagnostics.push(diagnostic.code),
+      }, 'debug', normalizeDebugConfig({ minDelay: 10, maxDelay: 10, pauseChance: 0 }));
+      assert.equal(engine.status, 'stopped'); engine.start(); await settle();
+      assert.equal(engine.status, 'unavailable'); harness.fire(0); await settle();
+      assert.equal(engine.status, 'running'); engine.stop();
+      assert.deepEqual(statuses, ['running', 'unavailable', 'running', 'stopped']);
+      assert.deepEqual(diagnostics, ['started', 'unavailable', 'recovered', 'cancelled-work', 'stopped']);
+    });
+
+test('diagnoses retry exhaustion and detector errors', async () => {
+      const diagnostics: string[] = []; const harness = timerHarness();
+      const exhausted = new AutoLikeEngine({ findButton: () => null, browser: detector([]), timer: harness.timer,
+        onDiagnostic: diagnostic => diagnostics.push(diagnostic.code) }, 'debug', normalizeDebugConfig({ maxRetries: 0 }));
+      exhausted.start(); await settle();
+      assert.deepEqual(diagnostics, ['started', 'unavailable', 'retry-exhausted']); exhausted.stop();
+      const failing = new AutoLikeEngine({ findButton: () => { throw new Error('detector'); }, browser: detector([]), timer: timerHarness().timer,
+        onDiagnostic: diagnostic => diagnostics.push(diagnostic.code) }, 'debug', normalizeDebugConfig({ maxRetries: 0 }));
+      failing.start(); await settle();
+      assert.deepEqual(diagnostics.slice(-3), ['detector-error', 'unavailable', 'retry-exhausted']); failing.stop();
+    });
+
 test('missing buttons count skips and retries before a later click', async () => {
   const harness = timerHarness();
   const target = button();

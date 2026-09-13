@@ -17,7 +17,7 @@ This roadmap keeps Autolike safe, predictable, testable, and independent from UI
 | 2 | Safe live entry | Every live starts stopped; no automatic resume | ✅ Merged (PR #7) |
 | 3 | Rate limiting and pacing | Clicks remain human-like and bounded | 🔶 Implemented; PR pending |
 | 4 | Lifecycle hardening | Timers, retries, observers, and sessions are cleaned up | 🔶 Phases one and two completed; deferred items listed below |
-| 5 | Observability | Users and maintainers can understand Autolike behavior | Planned |
+| 5 | Observability | Users and maintainers can understand Autolike behavior | 🔶 Implemented; PR pending |
 | 6 | Shared module contract | New features can reuse stable runtime and UI boundaries | Planned |
 | 7 | Second low-risk module | Expand the product without destabilizing Autolike | Planned |
 | 8 | Distribution | Version, package, and publish the extension reliably | Planned |
@@ -54,9 +54,11 @@ MutationObserver remains intentionally out of scope until DOM observation is int
 - Add and disconnect MutationObserver instances when DOM observation is introduced.
 - Extend stale-work coverage to every future asynchronous adapter, not only timers/retries.
 
-## 5. Observability and user feedback
+## 5. Observability and user feedback — implementation complete
 
-Add clear stopped, running, paused, and unavailable states; useful counters; optional debug logging; and structured lifecycle diagnostics without secrets or excessive personal data.
+The engine now exposes stopped, running, and unavailable status, with stopped covering the existing explicit stop/resume behavior. Optional structured diagnostics report lifecycle transitions, unavailable/recovered button detection, retry exhaustion, detector failures, and cancelled pending work without exposing page data. The widget derives its displayed status from the engine and renders skips, retries, multi-taps, and completed combos alongside the existing counters.
+
+Focused coverage includes status transitions, unavailable recovery, retry exhaustion, detector errors, cancellation diagnostics, and expanded widget counters. A separate paused state remains deferred until the runtime distinguishes pausing from stopping.
 
 ## 6. Shared module contract
 
@@ -77,7 +79,7 @@ Document local validation, versioning, packaging, release checks, and preservati
 3. ✅ Complete lifecycle hardening phases one and two (point 4; commit `8d54b76`).
 4. ✅ Implement rate limiting and human-like pacing (point 3; PR pending).
 5. Complete the deferred lifecycle foundations when observers or new asynchronous adapters are introduced (point 4).
-6. Improve observability and statistics (point 5).
+6. ✅ Implement observability and user feedback (point 5).
 7. Extract the shared module contract (point 6).
 8. Implement one low-risk second module (point 7).
 9. Prepare distribution and release workflow (point 8).

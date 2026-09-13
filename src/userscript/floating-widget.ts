@@ -1,4 +1,4 @@
-import type { AutoLikeEngine } from '../autolike/click-engine.ts';
+import type { AutoLikeEngine, EngineStatus } from '../autolike/click-engine.ts';
 import type { RegularMode } from '../autolike/config.ts';
 
 export interface WidgetPosition {
@@ -145,17 +145,19 @@ export class FloatingWidget {
     </style>
     <div data-drag-handle style="font-weight:700;cursor:grab">TikTok Enhanced</div>
     <div data-widget-module style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-      <span data-widget-module-entry aria-current="true">Autolike</span><span data-widget-status style="opacity:.8">${this.running ? 'Running' : 'Paused'}</span>
+      <span data-widget-module-entry aria-current="true">Autolike</span><span data-widget-status style="opacity:.8">${this.engineStatusLabel()}</span>
     </div>
     <div style="display:flex;gap:6px;margin-top:8px">
-      <button type="button" data-widget-control data-widget-toggle style="flex:1">${this.running ? 'Pause' : 'Resume'}</button>
+      <button type="button" data-widget-control data-widget-toggle style="flex:1">${this.engineStatus() === 'stopped' ? 'Resume' : 'Pause'}</button>
       <select data-widget-control data-widget-mode aria-label="Autolike mode">${VISIBLE_MODES.map(value => `<option value="${value}"${value === this.mode ? ' selected' : ''}>${value[0].toUpperCase()}${value.slice(1)}</option>`).join('')}</select>
     </div>
     <button type="button" data-widget-control data-widget-settings-toggle aria-expanded="false" style="margin-top:8px;width:100%">Settings</button>
     <div data-widget-settings><div data-widget-settings-content><div style="padding-top:8px;opacity:.8">Choose a mode above to tune click pacing.</div></div></div>
     <div data-widget-stats style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:8px;opacity:.85">
       <span>Total <b data-widget-stat="total">0</b></span><span>Success <b data-widget-stat="success">0</b></span>
-      <span>Failure <b data-widget-stat="failure">0</b></span><span>Current combo <b data-widget-stat="current-combo">0</b></span>
+      <span>Failure <b data-widget-stat="failure">0</b></span><span>Skips <b data-widget-stat="skips">0</b></span>
+          <span>Retries <b data-widget-stat="retries">0</b></span><span>Multi-taps <b data-widget-stat="multi-taps">0</b></span>
+          <span>Completed combos <b data-widget-stat="combos">0</b></span><span>Current combo <b data-widget-stat="current-combo">0</b></span>
       <span>Max combo <b data-widget-stat="max-combo">0</b></span>
     </div>`;
 
@@ -249,15 +251,23 @@ export class FloatingWidget {
     this.position = clampWidgetPosition(this.position, { width: this.options.window.innerWidth, height: this.options.window.innerHeight }, this.size());
     this.applyPosition(); save(this.options.storage, this.storageKey, JSON.stringify(this.position));
   };
+  private engineStatus(): EngineStatus {
+    return this.options.engine?.status ?? (this.running ? 'running' : 'stopped');
+  }
+  private engineStatusLabel(): string {
+    const status = this.engineStatus();
+    return status === 'unavailable' ? 'Unavailable' : status === 'running' ? 'Running' : 'Stopped';
+  }
+
   private refresh(): void {
     if (this.destroyed) return;
     const status = this.control('[data-widget-status]');
     const toggle = this.control('[data-widget-toggle]');
-    if (status) status.textContent = this.running ? 'Running' : 'Paused';
-    if (toggle) toggle.textContent = this.running ? 'Pause' : 'Resume';
+    if (status) status.textContent = this.engineStatusLabel();
+    if (toggle) toggle.textContent = this.engineStatus() === 'stopped' ? 'Resume' : 'Pause';
     const stats = this.options.engine?.statistics.stats;
     if (!stats) return;
-    const values: Record<string, number> = { total: stats.totalClicks, success: stats.successfulClicks, failure: stats.failedClicks, 'current-combo': stats.currentCombo, 'max-combo': stats.maxCombo };
+    const values: Record<string, number> = { total: stats.totalClicks ?? 0, success: stats.successfulClicks ?? 0, failure: stats.failedClicks ?? 0, skips: stats.skippedClicks ?? 0, retries: stats.retries ?? 0, 'multi-taps': stats.multiTaps ?? 0, combos: stats.combos ?? 0, 'current-combo': stats.currentCombo ?? 0, 'max-combo': stats.maxCombo ?? 0 };
     for (const [name, value] of Object.entries(values)) {
       const node = this.element.querySelector(`[data-widget-stat="${name}"]`);
       if (node) {
