@@ -1,6 +1,6 @@
 // Derived from AmpedWasTaken/TikTok-Live-Liker (MIT); see THIRD_PARTY_NOTICES.md.
 
-import { MODES, nextDelay, randomInteger } from './config.ts';
+import { COMBO_TIMEOUT, MODES, nextDelay, randomInteger } from './config.ts';
 import type { DebugConfig, Mode } from './config.ts';
 import { dispatchLikeClick } from './detector.ts';
 import type { LikeButtonElement, DetectorEnvironment } from './detector.ts';
@@ -19,7 +19,7 @@ export class AutoLikeEngine {
   private readonly stats: StatisticsTracker; private readonly pending = new Set<unknown>();
   private comboTimeoutId: unknown = null; private readonly deps: ClickEngineDependencies;
   private mode: Mode; private debugConfig: DebugConfig;
-  constructor(deps: ClickEngineDependencies, mode: Mode = 'normal', debugConfig: DebugConfig) {
+  constructor(deps: ClickEngineDependencies, mode: Mode = 'natural', debugConfig: DebugConfig) {
     this.deps = deps; this.mode = mode; this.debugConfig = debugConfig;
     this.random = deps.random ?? Math.random; this.now = deps.now ?? Date.now;
     this.stats = deps.stats ?? new StatisticsTracker(this.now);
@@ -36,7 +36,7 @@ export class AutoLikeEngine {
     this.stats.record(success);
     if (!success) { if (this.comboTimeoutId !== null) this.deps.timer.clear(this.comboTimeoutId); this.comboTimeoutId = null; return; }
     if (this.comboTimeoutId !== null) this.deps.timer.clear(this.comboTimeoutId);
-    this.comboTimeoutId = this.deps.timer.set(() => { this.comboTimeoutId = null; this.stats.finishCombo(); }, MODES.combo.comboTimeout!);
+    this.comboTimeoutId = this.deps.timer.set(() => { this.comboTimeoutId = null; this.stats.finishCombo(); }, COMBO_TIMEOUT);
   }
   private schedule(callback: () => void, delay: number): void {
     let id: unknown; id = this.deps.timer.set(() => { this.pending.delete(id); callback(); }, delay); this.pending.add(id);
@@ -46,13 +46,6 @@ export class AutoLikeEngine {
     this.missingButtonDelay = Math.min(this.missingButtonDelay * 2, 5000);
   }
   private async wait(delay: number): Promise<void> { await new Promise<void>(resolve => this.schedule(resolve, delay)); }
-  private async burst(button: LikeButtonElement, count: number): Promise<boolean> {
-    for (let i = 0; i < count && this.enabled; i++) {
-      if (!dispatchLikeClick(button, this.deps.browser)) return false;
-      this.record(true); if (i < count - 1 && this.enabled) await this.wait(MODES.combo.burstDelay!);
-    }
-    return true;
-  }
   private extra(button: LikeButtonElement, remaining: number): void {
     if (remaining <= 0) return;
     this.schedule(() => { if (!this.enabled) return;
@@ -63,18 +56,12 @@ export class AutoLikeEngine {
   private async clickLikeButton(): Promise<void> {
     const button = this.deps.findButton(); if (!button) { this.retry(); return; }
     this.missingButtonDelay = 250;
-    if (this.mode === 'combo') {
-      if (!await this.burst(button, MODES.combo.burstCount)) { this.retry(); return; }
-    } else {
-      if (!dispatchLikeClick(button, this.deps.browser)) { this.retry(); return; }
-      this.record(true);
-      if (this.mode === 'human' || this.mode === 'debug') {
-        const config = this.mode === 'debug' ? this.debugConfig : MODES.human;
-        const roll = this.random();
-        if (roll < config.tripleTapChance!) this.extra(button, 2);
-        else if (roll < config.tripleTapChance! + config.doubleTapChance!) this.extra(button, 1);
-      }
-    }
+    if (!dispatchLikeClick(button, this.deps.browser)) { this.retry(); return; }
+    this.record(true);
+    const config = this.mode === 'debug' ? this.debugConfig : MODES[this.mode];
+    const roll = this.random();
+    if (roll < config.tripleTapChance) this.extra(button, 2);
+    else if (roll < config.tripleTapChance + config.doubleTapChance) this.extra(button, 1);
     if (this.enabled) this.schedule(() => void this.clickLikeButton(), nextDelay(this.mode, this.debugConfig, this.random));
   }
 }
