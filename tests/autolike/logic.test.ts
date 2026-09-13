@@ -45,48 +45,40 @@ test('new mode delays are deterministic at regular and pause bounds', () => {
 });
 test('each new mode deterministically selects double and triple taps', async () => {
   for (const [mode, roll, extraCount] of [['calm', 0.03, 1], ['natural', 0, 2], ['active', 0.03, 1]] as const) {
-    const scheduled: number[] = [];
-    const callbacks: Array<() => void> = [];
+    const scheduled: number[] = []; const callbacks: Array<() => void> = [];
     const target = button({ dispatchEvent: () => true });
     const timer = { set: (callback: () => void, delay: number) => { callbacks.push(callback); scheduled.push(delay); return scheduled.length; }, clear: (_id: unknown) => {} };
     const values = [roll, 0, 0.99, 0, 0];
     const engine = new AutoLikeEngine({ findButton: () => target, browser: detector([target]), timer, random: () => values.shift() ?? 0 }, mode, normalizeDebugConfig({}));
-    engine.start(); await Promise.resolve();
-    assert.equal(scheduled.filter(delay => delay === 40).length, 1);
-    callbacks[1]?.();
-    assert.equal(scheduled.filter(delay => delay === 40).length, extraCount);
-    engine.stop();
+    engine.start(); await Promise.resolve(); assert.equal(scheduled.filter(delay => delay === 40).length, 1);
+    callbacks[1]?.(); assert.equal(scheduled.filter(delay => delay === 40).length, extraCount); engine.stop();
   }
 });
 test('stays stopped until explicitly started and ignores stale timer callbacks', async () => {
-      const callbacks: Array<() => void> = [];
-      const target = button({ dispatchEvent: () => true });
-      const timer = { set: (callback: () => void) => { callbacks.push(callback); return callbacks.length; }, clear: (_id: unknown) => {} };
-      const engine = new AutoLikeEngine({ findButton: () => target, browser: detector([target]), timer }, 'natural', normalizeDebugConfig({}));
-      assert.equal(engine.statistics.stats.totalClicks, 0);
-      engine.start(); await Promise.resolve();
-      assert.equal(engine.statistics.stats.totalClicks, 1);
-      engine.stop(); callbacks.forEach(callback => callback());
-      assert.equal(engine.statistics.stats.totalClicks, 1);
-      engine.start(); await Promise.resolve();
-      assert.equal(engine.statistics.stats.totalClicks, 2);
-      engine.stop();
-    });
-    test('statistics track successful and failed attempts', () => {
-  const tracker = new StatisticsTracker(() => 1234);
-  tracker.record(true); tracker.record(false);
+  const callbacks: Array<() => void> = []; const target = button({ dispatchEvent: () => true });
+  const timer = { set: (callback: () => void) => { callbacks.push(callback); return callbacks.length; }, clear: (_id: unknown) => {} };
+  const engine = new AutoLikeEngine({ findButton: () => target, browser: detector([target]), timer }, 'natural', normalizeDebugConfig({}));
+  assert.equal(engine.statistics.stats.totalClicks, 0); engine.start(); await Promise.resolve(); assert.equal(engine.statistics.stats.totalClicks, 1);
+  engine.stop(); callbacks.forEach(callback => callback()); assert.equal(engine.statistics.stats.totalClicks, 1); engine.start(); await Promise.resolve(); assert.equal(engine.statistics.stats.totalClicks, 2); engine.stop();
+});
+test('statistics track successful and failed attempts', () => {
+  const tracker = new StatisticsTracker(() => 1234); tracker.record(true); tracker.record(false);
   assert.deepEqual(tracker.stats, { hasActivity: true, totalClicks: 2, startTime: 1234, successfulClicks: 1, failedClicks: 1, combos: 1, maxCombo: 1, currentCombo: 0 });
 });
 test('button finder prefers a visible stable e2e button', () => {
-  const hidden = button({ getBoundingClientRect: () => ({ width: 0, height: 0 }) });
-  const visible = button();
+  const hidden = button({ getBoundingClientRect: () => ({ width: 0, height: 0 }) }); const visible = button();
   assert.equal(createButtonFinder(detector([hidden, visible]))(), visible);
 });
+test('button finder abandons detached roots and discovers a replacement', () => {
+  let connected = true;
+  const root = button({ isConnected: true });
+  const oldButton = button({ closest: () => root }); const replacement = button();
+  const documentRoot = { querySelectorAll: () => connected ? [oldButton] : [replacement], getElementsByClassName: () => [], contains: (element: LikeButtonElement) => element === root && connected };
+  const finder = createButtonFinder({ ...detector([]), document: documentRoot });
+  assert.equal(finder(), oldButton); connected = false; root.isConnected = false; oldButton.isConnected = false; assert.equal(finder(), replacement);
+});
 test('dispatch failure counts one attempt', async () => {
-  const failing = button({ dispatchEvent: () => false });
-  const timer = { set: (_callback: () => void, _delay: number) => 1, clear: (_id: unknown) => {} };
+  const failing = button({ dispatchEvent: () => false }); const timer = { set: (_callback: () => void, _delay: number) => 1, clear: (_id: unknown) => {} };
   const engine = new AutoLikeEngine({ findButton: () => failing, browser: detector([failing]), timer }, 'natural', normalizeDebugConfig({}));
-  engine.start(); await Promise.resolve();
-  assert.equal(engine.statistics.stats.totalClicks, 1); assert.equal(engine.statistics.stats.failedClicks, 1);
-  engine.stop();
+  engine.start(); await Promise.resolve(); assert.equal(engine.statistics.stats.totalClicks, 1); assert.equal(engine.statistics.stats.failedClicks, 1); engine.stop();
 });
