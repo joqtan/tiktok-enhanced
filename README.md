@@ -9,9 +9,10 @@ features rather than a single userscript implementation.
 ### Autolike
 
 The `autolike` module contains reusable logic for automated likes on TikTok live
-streams, including configurable delays, retries, burst behavior, human-like tap
-patterns, and statistics. It intentionally excludes UI, userscript metadata,
-page bootstrap, and other runtime-specific concerns.
+streams, including retries, statistics, and three humanized speed profiles:
+`Calm`, `Natural`, and `Active`. Each profile combines randomized delays, pauses,
+and occasional multi-taps. The module intentionally excludes UI, userscript
+metadata, page bootstrap, and other runtime-specific concerns.
 
 The Tampermonkey adapter lives separately at `src/userscript/index.ts`. It
 provides DOM and timer adapters, starts the engine on TikTok live pages, and

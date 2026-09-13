@@ -1,5 +1,5 @@
 import type { AutoLikeEngine } from '../autolike/click-engine.ts';
-import type { Mode, RegularMode } from '../autolike/config.ts';
+import type { RegularMode } from '../autolike/config.ts';
 
 export interface WidgetPosition {
   left: number;
@@ -30,7 +30,8 @@ export interface FloatingWidgetOptions {
 
 export const FLOATING_WIDGET_STORAGE_KEY = 'tiktok-enhanced:floating-widget-position';
 export const ACTIVE_MODULE_STORAGE_KEY = 'tiktok-enhanced:floating-widget-module';
-export const VISIBLE_MODES: readonly RegularMode[] = ['normal', 'turbo', 'stealth', 'human', 'combo'];
+export const AUTOLIKE_MODE_STORAGE_KEY = 'tiktok-enhanced:autolike-mode';
+export const VISIBLE_MODES: readonly RegularMode[] = ['calm', 'natural', 'active'];
 
 /** Format large counters so compact stat cells remain readable. */
 export function formatCompactCount(value: number): string {
@@ -72,6 +73,13 @@ function readPosition(storage: WidgetStorage | undefined, key: string): WidgetPo
   } catch { return null; }
 }
 
+function readMode(storage: WidgetStorage | undefined, key: string): RegularMode {
+  try {
+    const value = storage?.getItem(key);
+    return value && VISIBLE_MODES.includes(value as RegularMode) ? value as RegularMode : 'natural';
+  } catch { return 'natural'; }
+}
+
 function readModule(storage: WidgetStorage | undefined, key: string): 'autolike' {
   try { return storage?.getItem(key) === 'autolike' ? 'autolike' : 'autolike'; } catch { return 'autolike'; }
 }
@@ -99,7 +107,7 @@ export class FloatingWidget {
   private intervalId: unknown = null;
   private destroyed = false;
   private running: boolean;
-  private mode: Mode = 'normal';
+  private mode: RegularMode = 'natural';
   private readonly activeModuleName: 'autolike' = 'autolike';
 
   constructor(options: FloatingWidgetOptions) {
@@ -108,6 +116,8 @@ export class FloatingWidget {
     this.moduleStorageKey = options.moduleStorageKey ?? ACTIVE_MODULE_STORAGE_KEY;
     this.timer = options.timer ?? browserTimer(options.window);
     this.running = options.initiallyRunning ?? false;
+    this.mode = readMode(options.storage, AUTOLIKE_MODE_STORAGE_KEY);
+    options.engine?.setMode(this.mode);
     this.element = options.document.createElement('div');
     this.element.setAttribute('aria-label', 'TikTok Enhanced autolike');
     this.element.style.cssText = [
@@ -139,7 +149,7 @@ export class FloatingWidget {
     </div>
     <div style="display:flex;gap:6px;margin-top:8px">
       <button type="button" data-widget-control data-widget-toggle style="flex:1">${this.running ? 'Pause' : 'Resume'}</button>
-      <select data-widget-control data-widget-mode aria-label="Autolike mode">${VISIBLE_MODES.map(value => `<option value="${value}">${value[0].toUpperCase()}${value.slice(1)}</option>`).join('')}</select>
+      <select data-widget-control data-widget-mode aria-label="Autolike mode">${VISIBLE_MODES.map(value => `<option value="${value}"${value === this.mode ? ' selected' : ''}>${value[0].toUpperCase()}${value.slice(1)}</option>`).join('')}</select>
     </div>
     <button type="button" data-widget-control data-widget-settings-toggle aria-expanded="false" style="margin-top:8px;width:100%">Settings</button>
     <div data-widget-settings><div data-widget-settings-content><div style="padding-top:8px;opacity:.8">Choose a mode above to tune click pacing.</div></div></div>
@@ -205,7 +215,11 @@ export class FloatingWidget {
   };
   private onModeChange = (): void => {
     const value = this.control('[data-widget-mode]')?.value as RegularMode | undefined;
-    if (value && VISIBLE_MODES.includes(value)) { this.mode = value; this.options.engine?.setMode(value); }
+    if (value && VISIBLE_MODES.includes(value)) {
+      this.mode = value;
+      this.options.engine?.setMode(value);
+      save(this.options.storage, AUTOLIKE_MODE_STORAGE_KEY, value);
+    }
   };
   private onSettingsToggle = (): void => {
     const settings = this.control('[data-widget-settings]');

@@ -47,7 +47,7 @@ export function startAutolike(): AutoLikeEngine | null {
       set: (callback, delay) => window.setTimeout(callback, delay),
       clear: (id) => window.clearTimeout(id as number),
     } },
-    'normal',
+    'natural',
     DEBUG_CONFIG_DEFAULTS,
   );
   engine.start();
