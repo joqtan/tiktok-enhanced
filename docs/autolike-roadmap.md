@@ -18,7 +18,7 @@ This roadmap keeps Autolike safe, predictable, testable, and independent from UI
 | 3 | Rate limiting and pacing | Clicks remain human-like and bounded | ✅ Merged (PR #11) |
 | 4 | Lifecycle hardening | Timers, retries, observers, and sessions are cleaned up | ✅ Core session lifecycle complete |
 | 5 | Observability | Users and maintainers can understand Autolike behavior | ✅ Merged (PR #13) |
-| 6 | Shared module contract | New features can reuse stable runtime and UI boundaries | ✅ Implemented |
+| 6 | Shared module contract | New features can reuse stable runtime and UI boundaries | Planned |
 | 7 | Second low-risk module | Expand the product without destabilizing Autolike | Planned |
 | 8 | Distribution | Version, package, and publish the extension reliably | Planned |
 
@@ -38,7 +38,7 @@ The engine now preserves randomized delays for regular and debug modes, serializ
 
 Focused coverage includes retry exhaustion and cancellation, retry pause pacing, cycle work limits, bounded multi-taps, stale asynchronous work, safe limit normalization, and consistent statistics accounting. The implementation is ready for the next reviewable pull request.
 
-## 4. Browser lifecycle hardening — phase one completed
+## 4. Browser lifecycle hardening — core lifecycle complete
 
 This phase adds session-generation invalidation in the reusable engine. Stop cancels pending timers and retries, stale timer callbacks are ignored even if a timer adapter invokes them after cancellation, combo callbacks cannot mutate a later session, and repeated stop/teardown is safe. The runtime also owns live route transitions and removes the old widget/engine before mounting a new stopped entry.
 
@@ -46,13 +46,9 @@ This phase adds session-generation invalidation in the reusable engine. Stop can
 
 Runtime navigation is covered through actual pushState, replaceState, and popstate transitions across live A, live B, away, and live A again. Every live entry creates a fresh stopped engine/widget session; the old pair is stopped and destroyed exactly once. Session statistics are route-scoped and reset on every new live entry (mode and widget position may persist as configuration, but counters do not). The detector abandons disconnected roots and roots no longer contained by the document, then safely searches replacement DOM nodes.
 
-MutationObserver remains intentionally out of scope until DOM observation is introduced. Future observers and asynchronous adapters must be owned and invalidated by their session.
+Each live session now has an isolated, idempotent `SessionScope`. Engine, widget, and future session resources can register cleanup callbacks there; replacement and destruction dispose the old scope exactly once, while resources registered after disposal are cleaned up immediately. Existing engine generation checks continue to reject stale timer, retry, and combo work.
 
-### Remaining point-4 items
-
-- Centralize ownership for future observers and listeners by session.
-- Add and disconnect MutationObserver instances when DOM observation is introduced.
-- Extend stale-work coverage to every future asynchronous adapter, not only timers/retries.
+MutationObserver remains intentionally out of scope until DOM observation is introduced. When observation or another asynchronous adapter is added, it must register its cleanup with the owning session scope and retain generation/session guards.
 
 ## 5. Observability and user feedback — implementation complete
 
@@ -60,7 +56,7 @@ The engine now exposes stopped, running, and unavailable status, with stopped co
 
 Focused coverage includes status transitions, unavailable recovery, retry exhaustion, detector errors, cancellation diagnostics, and expanded widget counters. A separate paused state remains deferred until the runtime distinguishes pausing from stopping.
 
-## 6. Shared module contract — implementation complete
+## 6. Shared module contract
 
 The module boundary is now explicit across reusable core scheduling/state, injected DOM/timer/storage adapters, module UI, and runtime route/session lifecycle. Strict contracts are exported from `src/autolike/contract.ts`, browser wiring is composed at the userscript boundary, and the contract is documented in [`docs/module-contract.md`](./module-contract.md). The implementation preserves Autolike behavior while keeping future modules from depending on browser globals or runtime internals.
 
@@ -79,7 +75,7 @@ Document local validation, versioning, packaging, release checks, and preservati
 3. ✅ Complete lifecycle hardening phases one and two (point 4; commit `8d54b76`).
 4. ✅ Merge rate limiting and human-like pacing (point 3; PR #11).
 5. ✅ Complete core lifecycle hardening (point 4). Observer-specific cleanup will be added with DOM observation.
-6. ✅ Implement observability and user feedback (point 5).
+6. ✅ Merge observability and user feedback (point 5; PR #13).
 7. ✅ Extract the shared module contract (point 6).
 8. Implement one low-risk second module (point 7).
 9. Prepare distribution and release workflow (point 8).

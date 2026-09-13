@@ -14,6 +14,7 @@ import { createButtonFinder, dispatchLikeClick } from '../autolike/detector.ts';
 import { DEBUG_CONFIG_DEFAULTS } from '../autolike/config.ts';
 import type { DetectorEnvironment, LikeButtonElement, SearchRoot } from '../autolike/detector.ts';
 import { createFloatingWidget, type FloatingWidget } from './floating-widget.ts';
+import { createSessionScope, type SessionScope } from './session-scope.ts';
 
 /** Return whether a TikTok pathname represents a live stream page. */
 export function isLivePath(pathname: string): boolean {
@@ -58,6 +59,7 @@ export interface AutolikeRuntimeOptions {
 export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
   let activeEngine: AutoLikeEngine | null = null;
   let activeWidget: FloatingWidget | null = null;
+  let activeScope: SessionScope | null = null;
   let installed = false;
   let originalPushState: typeof options.window.history.pushState | null = null;
   let originalReplaceState: typeof options.window.history.replaceState | null = null;
@@ -72,21 +74,30 @@ export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
   }));
 
   function destroy(): void {
-    const engine = activeEngine;
-    const widget = activeWidget;
+    const scope = activeScope;
+    activeScope = null;
     activeEngine = null;
     activeWidget = null;
-    engine?.stop();
-    widget?.destroy();
+    scope?.dispose();
   }
 
   function start(): AutoLikeEngine | null {
     if (!isLivePath(options.window.location.pathname)) { destroy(); return null; }
     destroy();
+    const scope = createSessionScope();
     const engine = createEngine();
-    activeWidget = createWidget(engine);
-    activeEngine = engine;
-    return engine;
+    scope.add(() => engine.stop());
+    try {
+      const widget = createWidget(engine);
+      scope.add(() => widget.destroy());
+      activeScope = scope;
+      activeEngine = engine;
+      activeWidget = widget;
+      return engine;
+    } catch (error) {
+      scope.dispose();
+      throw error;
+    }
   }
 
   function sync(): void { if (isLivePath(options.window.location.pathname)) start(); else destroy(); }
