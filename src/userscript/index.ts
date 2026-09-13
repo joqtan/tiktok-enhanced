@@ -31,14 +31,42 @@ function createBrowserEnvironment(): DetectorEnvironment {
 
 let activeEngine: AutoLikeEngine | null = null;
 let activeWidget: FloatingWidget | null = null;
+let lifecycleInstalled = false;
+let originalPushState: typeof history.pushState | null = null;
+let originalReplaceState: typeof history.replaceState | null = null;
 
-function getStorage(): Storage | undefined {
-  try { return window.localStorage; } catch { return undefined; }
+function syncAutolikeRoute(): void {
+  if (isLivePath(window.location.pathname)) startAutolike(); else destroyAutolike();
+}
+
+function installLifecycle(): void {
+  if (lifecycleInstalled) return;
+  lifecycleInstalled = true;
+  window.addEventListener('popstate', syncAutolikeRoute);
+  window.addEventListener('hashchange', syncAutolikeRoute);
+  originalPushState = window.history.pushState;
+  originalReplaceState = window.history.replaceState;
+  for (const method of ['pushState', 'replaceState'] as const) {
+    const original = window.history[method];
+    window.history[method] = function (this: History, ...args: Parameters<typeof original>): ReturnType<typeof original> {
+      const result = original.apply(this, args);
+      syncAutolikeRoute();
+      return result;
+    } as typeof original;
+  }
+}
+
+function uninstallLifecycle(): void {
+  if (!lifecycleInstalled) return;
+  window.removeEventListener('popstate', syncAutolikeRoute);
+  window.removeEventListener('hashchange', syncAutolikeRoute);
+  if (originalPushState) window.history.pushState = originalPushState;
+  if (originalReplaceState) window.history.replaceState = originalReplaceState;
+  originalPushState = null; originalReplaceState = null; lifecycleInstalled = false;
 }
 
 export function startAutolike(): AutoLikeEngine | null {
-  if (!isLivePath(window.location.pathname)) return null;
-
+  if (!isLivePath(window.location.pathname)) { destroyAutolike(); return null; }
   activeEngine?.stop();
   activeWidget?.destroy();
   const browser = createBrowserEnvironment();
@@ -50,12 +78,16 @@ export function startAutolike(): AutoLikeEngine | null {
     'natural',
     DEBUG_CONFIG_DEFAULTS,
   );
-  engine.start();
+  // Live entry is deliberately stopped; the widget is the explicit start boundary.
   activeWidget = createFloatingWidget({
-    document, window, storage: getStorage(), engine, initiallyRunning: true,
+    document, window, storage: getStorage(), engine, initiallyRunning: false,
   });
   activeEngine = engine;
   return engine;
+}
+
+function getStorage(): Storage | undefined {
+  try { return window.localStorage; } catch { return undefined; }
 }
 
 /** Stop the runtime and remove the floating widget when the userscript is unloaded. */
@@ -67,6 +99,7 @@ export function destroyAutolike(): void {
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  installLifecycle();
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { startAutolike(); }, { once: true });
   } else {
