@@ -39,16 +39,3 @@ jobs:
 
       - name: Build production userscript
         run: pnpm run build
-
-  delete-merged-branch:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Delete merged branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: gh api --method DELETE "repos/$REPOSITORY/git/refs/heads/$HEAD_REF"
