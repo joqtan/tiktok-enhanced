@@ -58,7 +58,9 @@ without a live TikTok page.
 
 Reusable feature logic lives under `src/autolike`. Browser APIs, UI, and runtime
 entry points are connected through explicit adapters under feature-specific
-integration surfaces.
+integration surfaces. Each live userscript session owns its engine, widget, and
+future asynchronous resources through an idempotent session scope, so route
+changes dispose the previous session without allowing stale work to leak.
 
 ## Licensing
 
