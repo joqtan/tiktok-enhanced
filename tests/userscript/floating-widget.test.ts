@@ -46,7 +46,7 @@ function setup(saved?: string, savedMode?: string, storageFailure = false) {
     style: { cssText: '', left: '', top: '', right: '', bottom: '' }, offsetWidth: 190, offsetHeight: 70,
     innerHTML: '', setAttribute: () => {}, addEventListener: elementEvents.addEventListener.bind(elementEvents),
     removeEventListener: elementEvents.removeEventListener.bind(elementEvents), remove: () => { removed = true; },
-    querySelector: (selector: string) => selector === '[data-widget-mode]' ? modeControl : ({ textContent: '', setAttribute: () => {} }),
+    querySelector: (selector: string) => selector === '[data-widget-mode]' ? modeControl : selector === '[data-widget-toggle]' ? toggleControl : ({ textContent: '', setAttribute: () => {} }),
   };
   let removed = false;
   const document = { body: { appendChild: () => {} }, createElement: () => element,
@@ -55,9 +55,15 @@ function setup(saved?: string, savedMode?: string, storageFailure = false) {
     removeEventListener: windowEvents.removeEventListener.bind(windowEvents), setInterval: () => 1, clearInterval: () => {} };
   const timer = { setInterval: () => 1, clearInterval: () => { cleared = true; } };
   let cleared = false;
-  const engine = {
-    modes: [] as string[],
+  const toggleControl = {
+     addEventListener: elementEvents.addEventListener.bind(elementEvents),
+     removeEventListener: elementEvents.removeEventListener.bind(elementEvents),
+     textContent: '',
+   };
+   const engine = {
+    modes: [] as string[], starts: 0, stops: 0,
     setMode: (mode: string) => { engine.modes.push(mode); },
+        start: () => { engine.starts++; }, stop: () => { engine.stops++; },
     statistics: { stats: { totalClicks: 0, successfulClicks: 0, failedClicks: 0, currentCombo: 0, maxCombo: 0 } },
   };
   const widget = new FloatingWidget({ document: document as never, window: window as never, storage, timer, engine: engine as never });
@@ -100,7 +106,15 @@ for (const mode of VISIBLE_MODES) {
   });
 }
 
-test('persists valid mode changes', () => {
+test('enters stopped and starts only after the explicit control action', () => {
+      const app = setup();
+      assert.match(app.widget.element.innerHTML, />Paused</);
+      app.elementEvents.dispatch('click', {});
+      assert.equal(app.engine.starts, 1);
+      assert.equal(app.engine.stops, 0);
+    });
+
+    test('persists valid mode changes', () => {
   const app = setup();
   app.modeControl.value = 'calm';
   app.elementEvents.dispatch('change', {});

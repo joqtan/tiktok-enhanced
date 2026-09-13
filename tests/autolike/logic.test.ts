@@ -58,7 +58,21 @@ test('each new mode deterministically selects double and triple taps', async () 
     engine.stop();
   }
 });
-test('statistics track successful and failed attempts', () => {
+test('stays stopped until explicitly started and ignores stale timer callbacks', async () => {
+      const callbacks: Array<() => void> = [];
+      const target = button({ dispatchEvent: () => true });
+      const timer = { set: (callback: () => void) => { callbacks.push(callback); return callbacks.length; }, clear: (_id: unknown) => {} };
+      const engine = new AutoLikeEngine({ findButton: () => target, browser: detector([target]), timer }, 'natural', normalizeDebugConfig({}));
+      assert.equal(engine.statistics.stats.totalClicks, 0);
+      engine.start(); await Promise.resolve();
+      assert.equal(engine.statistics.stats.totalClicks, 1);
+      engine.stop(); callbacks.forEach(callback => callback());
+      assert.equal(engine.statistics.stats.totalClicks, 1);
+      engine.start(); await Promise.resolve();
+      assert.equal(engine.statistics.stats.totalClicks, 2);
+      engine.stop();
+    });
+    test('statistics track successful and failed attempts', () => {
   const tracker = new StatisticsTracker(() => 1234);
   tracker.record(true); tracker.record(false);
   assert.deepEqual(tracker.stats, { hasActivity: true, totalClicks: 2, startTime: 1234, successfulClicks: 1, failedClicks: 1, combos: 1, maxCombo: 1, currentCombo: 0 });

@@ -18,7 +18,7 @@ export class AutoLikeEngine {
   private readonly random: () => number; private readonly now: () => number;
   private readonly stats: StatisticsTracker; private readonly pending = new Set<unknown>();
   private comboTimeoutId: unknown = null; private readonly deps: ClickEngineDependencies;
-  private mode: Mode; private debugConfig: DebugConfig;
+  private sessionGeneration = 0; private mode: Mode; private debugConfig: DebugConfig;
   constructor(deps: ClickEngineDependencies, mode: Mode = 'natural', debugConfig: DebugConfig) {
     this.deps = deps; this.mode = mode; this.debugConfig = debugConfig;
     this.random = deps.random ?? Math.random; this.now = deps.now ?? Date.now;
@@ -27,41 +27,62 @@ export class AutoLikeEngine {
   get statistics(): StatisticsTracker { return this.stats; }
   setMode(mode: Mode): void { this.mode = mode; }
   setDebugConfig(config: DebugConfig): void { this.debugConfig = config; }
-  start(): void { if (!this.enabled) { this.enabled = true; void this.clickLikeButton(); } }
+  start(): void {
+    if (this.enabled) return;
+    this.enabled = true;
+    const generation = ++this.sessionGeneration;
+    void this.clickLikeButton(generation);
+  }
   stop(): void {
-    this.enabled = false; for (const id of this.pending) this.deps.timer.clear(id); this.pending.clear();
+    this.enabled = false; ++this.sessionGeneration;
+    for (const id of this.pending) this.deps.timer.clear(id);
+    this.pending.clear();
     if (this.comboTimeoutId !== null) { this.deps.timer.clear(this.comboTimeoutId); this.comboTimeoutId = null; }
   }
   private record(success: boolean): void {
     this.stats.record(success);
     if (!success) { if (this.comboTimeoutId !== null) this.deps.timer.clear(this.comboTimeoutId); this.comboTimeoutId = null; return; }
     if (this.comboTimeoutId !== null) this.deps.timer.clear(this.comboTimeoutId);
-    this.comboTimeoutId = this.deps.timer.set(() => { this.comboTimeoutId = null; this.stats.finishCombo(); }, COMBO_TIMEOUT);
+    const generation = this.sessionGeneration;
+    this.comboTimeoutId = this.deps.timer.set(() => {
+      if (!this.enabled || generation !== this.sessionGeneration) return;
+      this.comboTimeoutId = null; this.stats.finishCombo();
+    }, COMBO_TIMEOUT);
   }
-  private schedule(callback: () => void, delay: number): void {
-    let id: unknown; id = this.deps.timer.set(() => { this.pending.delete(id); callback(); }, delay); this.pending.add(id);
+  private schedule(callback: () => void, delay: number, generation = this.sessionGeneration): void {
+    let id: unknown;
+    id = this.deps.timer.set(() => {
+      this.pending.delete(id);
+      if (this.enabled && generation === this.sessionGeneration) callback();
+    }, delay);
+    this.pending.add(id);
   }
-  private retry(): void {
-    this.record(false); this.schedule(() => void this.clickLikeButton(), this.missingButtonDelay);
+  private retry(generation: number): void {
+    if (!this.enabled || generation !== this.sessionGeneration) return;
+    this.record(false); this.schedule(() => void this.clickLikeButton(generation), this.missingButtonDelay, generation);
     this.missingButtonDelay = Math.min(this.missingButtonDelay * 2, 5000);
   }
   private async wait(delay: number): Promise<void> { await new Promise<void>(resolve => this.schedule(resolve, delay)); }
   private extra(button: LikeButtonElement, remaining: number): void {
     if (remaining <= 0) return;
-    this.schedule(() => { if (!this.enabled) return;
+    this.schedule(() => {
+      if (!this.enabled) return;
       if (dispatchLikeClick(button, this.deps.browser)) { this.record(true); this.extra(button, remaining - 1); }
       else this.record(false);
     }, randomInteger(this.random, 40, 130));
   }
-  private async clickLikeButton(): Promise<void> {
-    const button = this.deps.findButton(); if (!button) { this.retry(); return; }
+  private async clickLikeButton(generation: number): Promise<void> {
+    if (!this.enabled || generation !== this.sessionGeneration) return;
+    const button = this.deps.findButton(); if (!button) { this.retry(generation); return; }
     this.missingButtonDelay = 250;
-    if (!dispatchLikeClick(button, this.deps.browser)) { this.retry(); return; }
+    if (!dispatchLikeClick(button, this.deps.browser)) { this.retry(generation); return; }
     this.record(true);
     const config = this.mode === 'debug' ? this.debugConfig : MODES[this.mode];
     const roll = this.random();
     if (roll < config.tripleTapChance) this.extra(button, 2);
     else if (roll < config.tripleTapChance + config.doubleTapChance) this.extra(button, 1);
-    if (this.enabled) this.schedule(() => void this.clickLikeButton(), nextDelay(this.mode, this.debugConfig, this.random));
+    if (this.enabled && generation === this.sessionGeneration) {
+      this.schedule(() => void this.clickLikeButton(generation), nextDelay(this.mode, this.debugConfig, this.random), generation);
+    }
   }
 }
