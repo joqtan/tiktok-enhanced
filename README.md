@@ -25,7 +25,7 @@ cyan/pink accents. Its position and active module are persisted in
 
 ## Development and build
 
-This project uses pnpm exclusively:
+This project uses Node.js 22 LTS and pnpm 10 exclusively. CI validates every pull request and every push to `main` with the same commands:
 
 ```sh
 pnpm install
