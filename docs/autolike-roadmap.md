@@ -58,7 +58,7 @@ Focused coverage includes status transitions, unavailable recovery, retry exhaus
 
 ## 6. Shared module contract
 
-Define boundaries for core scheduling/state, DOM/timer/storage adapters, UI, and runtime route lifecycle before adding unrelated features.
+The module boundary is now explicit across reusable core scheduling/state, injected DOM/timer/storage adapters, module UI, and runtime route/session lifecycle. Strict contracts are exported from `src/autolike/contract.ts`, browser wiring is composed at the userscript boundary, and the contract is documented in [`docs/module-contract.md`](./module-contract.md). The implementation preserves Autolike behavior while keeping future modules from depending on browser globals or runtime internals.
 
 ## 7. Add a second, lower-risk module
 
@@ -76,7 +76,7 @@ Document local validation, versioning, packaging, release checks, and preservati
 4. ✅ Merge rate limiting and human-like pacing (point 3; PR #11).
 5. ✅ Complete core lifecycle hardening (point 4). Observer-specific cleanup will be added with DOM observation.
 6. ✅ Merge observability and user feedback (point 5; PR #13).
-7. Extract the shared module contract (point 6).
+7. ✅ Extract the shared module contract (point 6).
 8. Implement one low-risk second module (point 7).
 9. Prepare distribution and release workflow (point 8).
 

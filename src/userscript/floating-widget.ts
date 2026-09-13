@@ -1,4 +1,5 @@
-import type { AutoLikeEngine, EngineStatus } from '../autolike/click-engine.ts';
+import type { EngineStatus } from '../autolike/click-engine.ts';
+import type { AutolikeCore, StorageAdapter } from '../autolike/contract.ts';
 import type { RegularMode } from '../autolike/config.ts';
 
 export interface WidgetPosition {
@@ -6,10 +7,7 @@ export interface WidgetPosition {
   top: number;
 }
 
-export interface WidgetStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
+export type WidgetStorage = StorageAdapter;
 
 export interface WidgetTimer {
   setInterval(callback: () => void, delay: number): unknown;
@@ -24,7 +22,7 @@ export interface FloatingWidgetOptions {
   moduleStorageKey?: string;
   timer?: WidgetTimer;
   updateInterval?: number;
-  engine?: AutoLikeEngine;
+  engine?: AutolikeCore;
   initiallyRunning?: boolean;
 }
 

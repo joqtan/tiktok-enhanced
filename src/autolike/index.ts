@@ -4,3 +4,4 @@ export * from './config.ts';
 export * from './detector.ts';
 export * from './statistics.ts';
 export * from './click-engine.ts';
+export * from './contract.ts';

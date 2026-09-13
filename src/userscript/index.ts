@@ -9,7 +9,8 @@
 // ==/UserScript==
 
 import { AutoLikeEngine } from '../autolike/click-engine.ts';
-import { createButtonFinder } from '../autolike/detector.ts';
+import type { AutolikeBrowserAdapters, StorageAdapter } from '../autolike/contract.ts';
+import { createButtonFinder, dispatchLikeClick } from '../autolike/detector.ts';
 import { DEBUG_CONFIG_DEFAULTS } from '../autolike/config.ts';
 import type { DetectorEnvironment, LikeButtonElement, SearchRoot } from '../autolike/detector.ts';
 import { createFloatingWidget, type FloatingWidget } from './floating-widget.ts';
@@ -27,6 +28,20 @@ function createBrowserEnvironment(documentRef: Document, windowRef: Window): Det
     getComputedStyle: (element: LikeButtonElement) => windowRef.getComputedStyle(element as unknown as Element),
     createClickEvent: () => new MouseEvent('click', { bubbles: true, cancelable: true, view: windowRef }),
     logError: (message, error) => console.error(`[tiktok-enhanced] ${message}`, error),
+  };
+}
+
+/** Compose the browser-specific DOM, timer, and storage adapters at the integration boundary. */
+export function createBrowserAdapters(documentRef: Document, windowRef: Window): AutolikeBrowserAdapters {
+  const browser = createBrowserEnvironment(documentRef, windowRef);
+  return {
+    findButton: createButtonFinder(browser),
+    clickButton: button => dispatchLikeClick(button, browser),
+    timer: {
+      set: (callback, delay) => windowRef.setTimeout(callback, delay),
+      clear: id => windowRef.clearTimeout(id as number),
+    },
+    storage: getStorage(windowRef),
   };
 }
 
@@ -49,17 +64,13 @@ export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
   let originalPushState: typeof options.window.history.pushState | null = null;
   let originalReplaceState: typeof options.window.history.replaceState | null = null;
 
+  let sessionAdapters: AutolikeBrowserAdapters | undefined;
   const createEngine = options.createEngine ?? (() => {
-    const browser = createBrowserEnvironment(options.document, options.window);
-    return new AutoLikeEngine(
-      { findButton: createButtonFinder(browser), browser, timer: {
-        set: (callback, delay) => options.window.setTimeout(callback, delay),
-        clear: (id) => options.window.clearTimeout(id as number),
-      } }, 'natural', DEBUG_CONFIG_DEFAULTS,
-    );
+    sessionAdapters = createBrowserAdapters(options.document, options.window);
+    return new AutoLikeEngine({ ...sessionAdapters }, 'natural', DEBUG_CONFIG_DEFAULTS);
   });
   const createWidget = options.createWidget ?? ((engine: AutoLikeEngine) => createFloatingWidget({
-    document: options.document, window: options.window, storage: getStorage(options.window), engine, initiallyRunning: false,
+    document: options.document, window: options.window, storage: sessionAdapters?.storage ?? getStorage(options.window), engine, initiallyRunning: false,
   }));
 
   function destroy(): void {
@@ -122,7 +133,7 @@ export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
   return { start, destroy, sync, install, uninstall, get engine() { return activeEngine; }, get widget() { return activeWidget; } };
 }
 
-function getStorage(windowRef: Window): Storage | undefined {
+function getStorage(windowRef: Window): StorageAdapter | undefined {
   try { return windowRef.localStorage; } catch { return undefined; }
 }
 
