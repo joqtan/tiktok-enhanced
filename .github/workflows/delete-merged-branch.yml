@@ -1,0 +1,41 @@
+name: Delete merged branch
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  delete-merged-branch:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          MERGED_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            default_branch="$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+            refs="$(gh api --paginate "repos/$REPOSITORY/pulls?state=closed&base=$default_branch&per_page=100" --jq '.[] | select(.merged_at != null and .head.repo != null and .head.repo.full_name == "'"$REPOSITORY"'") | [.head.ref, .head.sha] | @tsv')"
+          else
+            refs="${MERGED_HEAD_REF}"$'\t'"${MERGED_HEAD_SHA}"
+          fi
+
+          while IFS=$'\t' read -r HEAD_REF HEAD_SHA; do
+            [ -n "$HEAD_REF" ] || continue
+            CURRENT_SHA="$(gh api "repos/$REPOSITORY/git/ref/heads/$HEAD_REF" --jq '.object.sha' 2>/dev/null || true)"
+            if [ "$CURRENT_SHA" = "$HEAD_SHA" ]; then
+              echo "Deleting merged branch $HEAD_REF"
+              gh api --method DELETE "repos/$REPOSITORY/git/refs/heads/$HEAD_REF"
+            else
+              echo "Skipping $HEAD_REF because it was recreated or advanced"
+            fi
+          done <<< "$refs"
