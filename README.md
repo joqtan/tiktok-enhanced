@@ -50,6 +50,22 @@ The allowlist is stored locally in this browser, not in your TikTok account.
 Invalid or unreadable saved data cannot enable automatic start. If saving fails,
 Settings shows an error instead of claiming the profile was saved.
 
+## Install and update
+
+Install the [latest userscript](https://github.com/joqtan/tiktok-enhanced/releases/latest/download/tiktok-enhanced.user.js)
+with Tampermonkey enabled, then confirm installation in Tampermonkey. The release
+includes the compiled script; you do not need Node.js or pnpm to install it.
+
+If you previously pasted the script manually, install version **0.2.0** from that
+link once to give Tampermonkey the update URLs. Keep the existing script name and
+namespace so Tampermonkey can recognize it as an update. Check that only one copy
+is enabled.
+
+After that, Tampermonkey can check the published version according to its update
+settings. You can also use its **Check for updates** action. It downloads newer
+versions from GitHub Releases, not directly from the source branch. Browser-local
+preferences remain in `localStorage`; this update does not change their keys.
+
 ## Development and build
 
 This project uses Node.js 22 LTS and pnpm 10 exclusively. CI validates every pull request and every push to `main` with the same commands:
@@ -81,6 +97,36 @@ userscript wholesale.
 
 Tests are located under `tests/` and focus on behavior that can be validated
 without a live TikTok page.
+
+## Publish a release
+
+Releases are published manually; pushing source changes alone does not update
+installed scripts. Keep the release asset name `tiktok-enhanced.user.js` stable,
+because both `@updateURL` and `@downloadURL` use GitHub's latest-release URL.
+
+1. Increase `@version` in both `tools/build.mjs` (the generated header) and
+   `src/userscript/index.ts`. Use a higher version than the latest published one.
+2. Run `pnpm test` and `pnpm run build`. Check the version and update URLs at the
+   beginning of `dist/tiktok-enhanced.user.js`.
+3. Commit the version change and push the release branch.
+4. Publish the release against that exact commit, attaching the compiled script.
+   For the first release, the commands are:
+
+   ```sh
+   git push -u origin HEAD
+   gh release create v0.2.0 dist/tiktok-enhanced.user.js --repo joqtan/tiktok-enhanced --target "$(git rev-parse HEAD)" --title "v0.2.0" --notes "Add profile autostart, a collapsible panel, and Tampermonkey update support." --latest
+   ```
+
+   For future releases, substitute the new version and release notes. This
+   publishes a tag and release without merging the branch into `main`.
+
+5. Confirm the release lists the asset, and that the
+   [latest download](https://github.com/joqtan/tiktok-enhanced/releases/latest/download/tiktok-enhanced.user.js)
+   serves the expected version. Keep stable releases separate from prereleases;
+   the update URLs follow the release designated as latest.
+
+The `dist/` artifact stays ignored by Git. Attach the freshly built file to each
+release rather than committing it.
 
 ## Architecture
 

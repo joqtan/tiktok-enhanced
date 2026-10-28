@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name         TikTok Enhanced Autolike
 // @namespace    tiktok-enhanced
-// @version      0.1.0
+// @version      0.2.0
+// @updateURL    https://github.com/joqtan/tiktok-enhanced/releases/latest/download/tiktok-enhanced.user.js
+// @downloadURL  https://github.com/joqtan/tiktok-enhanced/releases/latest/download/tiktok-enhanced.user.js
 // @description  Automatically like TikTok live streams.
 // @match        https://www.tiktok.com/*
 // @grant        none
