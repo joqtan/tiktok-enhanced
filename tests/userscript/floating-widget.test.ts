@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { AUTOSTART_STORAGE_KEY } from '../../src/userscript/autostart.ts';
 import {
   AUTOLIKE_MODE_STORAGE_KEY,
   clampWidgetPosition,
@@ -19,7 +20,7 @@ class Events {
   count(name: string): number { return this.listeners.get(name)?.size ?? 0; }
 }
 
-function setup(saved?: string, savedMode?: string, storageFailure = false, preferences: Record<string, string> = {}) {
+function setup(saved?: string, savedMode?: string, storageFailure = false, preferences: Record<string, string> = {}, pathname = '/@alice/live') {
   const documentEvents = new Events();
   const windowEvents = new Events();
   const values = new Map<string, string>(Object.entries(preferences));
@@ -46,11 +47,17 @@ function setup(saved?: string, savedMode?: string, storageFailure = false, prefe
   function makeControl() {
     const events = new Events();
     const attributes = new Map<string, string>();
-    return { events, textContent: '', hidden: false, attributes,
+    const children: ReturnType<typeof makeControl>[] = [];
+    return { events, textContent: '', hidden: false, disabled: false, attributes, children,
+      replaceChildren: () => { children.length = 0; },
+      appendChild: (child: ReturnType<typeof makeControl>) => { children.push(child); },
+      getAttribute: (key: string) => attributes.get(key) ?? null,
       setAttribute: (key: string, value: string) => { attributes.set(key, value); },
       addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events) };
   }
-  for (const name of ['collapse', 'settings-toggle', 'settings', 'stats']) controls.set(name, makeControl());
+  for (const name of ['collapse', 'settings-toggle', 'settings', 'stats', 'autostart-current', 'autostart-list', 'autostart-message']) {
+    controls.set(name, makeControl());
+  }
   const element = {
     style: { cssText: '', left: '', top: '', right: '', bottom: '' }, offsetWidth: 190, offsetHeight: 70,
     innerHTML: '', setAttribute: () => {}, addEventListener: elementEvents.addEventListener.bind(elementEvents),
@@ -58,9 +65,13 @@ function setup(saved?: string, savedMode?: string, storageFailure = false, prefe
     querySelector: (selector: string) => controls.get(selector.replace('[data-widget-', '').replace(']', '')) ?? (selector === '[data-widget-mode]' ? modeControl : selector === '[data-widget-toggle]' ? toggleControl : ({ textContent: '', setAttribute: () => {} })),
   };
   let removed = false;
-  const document = { body: { appendChild: () => {} }, createElement: () => element,
+  let rootCreated = false;
+  const document = { body: { appendChild: () => {} }, createElement: () => {
+    if (!rootCreated) { rootCreated = true; return element; }
+    return makeControl();
+  },
     addEventListener: documentEvents.addEventListener.bind(documentEvents), removeEventListener: documentEvents.removeEventListener.bind(documentEvents) };
-  const window = { innerWidth: 400, innerHeight: 300, addEventListener: windowEvents.addEventListener.bind(windowEvents),
+  const window = { location: { pathname }, innerWidth: 400, innerHeight: 300, addEventListener: windowEvents.addEventListener.bind(windowEvents),
     removeEventListener: windowEvents.removeEventListener.bind(windowEvents), setInterval: () => 1, clearInterval: () => {} };
   const timer = { setInterval: () => 1, clearInterval: () => { cleared = true; } };
   let cleared = false;
@@ -72,8 +83,8 @@ function setup(saved?: string, savedMode?: string, storageFailure = false, prefe
    const engine = {
     modes: [] as string[], starts: 0, stops: 0,
     setMode: (mode: string) => { engine.modes.push(mode); },
-        start: () => { engine.starts++; }, stop: () => { engine.stops++; },
-    status: 'stopped' as const, statistics: { stats: { totalClicks: 0, successfulClicks: 0, failedClicks: 0, skippedClicks: 2, retries: 3, multiTaps: 4, combos: 5, currentCombo: 0, maxCombo: 6 } },
+    start: () => { engine.starts++; engine.status = 'running'; }, stop: () => { engine.stops++; engine.status = 'stopped'; },
+    status: 'stopped' as 'stopped' | 'running' | 'unavailable', statistics: { stats: { totalClicks: 0, successfulClicks: 0, failedClicks: 0, skippedClicks: 2, retries: 3, multiTaps: 4, combos: 5, currentCombo: 0, maxCombo: 6 } },
   };
   const widget = new FloatingWidget({ document: document as never, window: window as never, storage, timer, engine: engine as never });
   return { widget, controls, element, documentEvents, windowEvents, elementEvents, modeControl, storage, values, engine, window, get removed() { return removed; }, get cleared() { return cleared; } };
@@ -183,6 +194,7 @@ test('destroy removes listeners, timer, and element', () => {
   assert.equal(app.removed, true);
 });
 
+
 test('collapses details without changing execution and persists the preference', () => {
   const app = setup();
   app.controls.get('collapse')!.events.dispatch('click', {});
@@ -212,7 +224,56 @@ test('restores collapsed state and clamps expansion without starting a drag from
   app.documentEvents.dispatch('pointermove', pointer(1, 10, 10));
   assert.deepEqual(app.widget.getPosition(), { left: 200, top: 100 });
   app.widget.destroy();
+  assert.equal(app.controls.get('autostart-current')!.events.count('click'), 0);
+  assert.equal(app.controls.get('autostart-list')!.events.count('click'), 0);
   assert.equal(app.documentEvents.count('pointerup'), 0);
   assert.equal(app.documentEvents.count('pointercancel'), 0);
   assert.equal(app.cleared, true);
+});
+
+test('adds the current profile for next entry only and removes saved profiles', () => {
+  const app = setup(undefined, undefined, false, { [AUTOSTART_STORAGE_KEY]: '["bob"]' });
+  const current = app.controls.get('autostart-current')!;
+  const list = app.controls.get('autostart-list')!;
+  assert.equal(current.textContent, 'Add @alice');
+  assert.equal(list.children[0].textContent, 'Remove @bob');
+  current.events.dispatch('click', {});
+  assert.equal(app.values.get(AUTOSTART_STORAGE_KEY), '["bob","alice"]');
+  assert.equal(current.textContent, 'Remove @alice');
+  assert.equal(app.engine.starts, 0);
+  list.events.dispatch('click', { target: { closest: () => list.children[0] } });
+  assert.equal(app.values.get(AUTOSTART_STORAGE_KEY), '["alice"]');
+  current.events.dispatch('click', {});
+  assert.equal(app.values.get(AUTOSTART_STORAGE_KEY), '[]');
+  assert.equal(app.engine.stops, 0);
+});
+
+test('reports a failed allowlist write without claiming success or updating membership', () => {
+  const app = setup();
+  app.storage.setItem = () => { throw new Error('quota exceeded'); };
+  app.controls.get('autostart-current')!.events.dispatch('click', {});
+  assert.match(app.controls.get('autostart-message')!.textContent, /Could not save/);
+  assert.equal(app.controls.get('autostart-current')!.textContent, 'Add @alice');
+  assert.equal(app.values.has(AUTOSTART_STORAGE_KEY), false);
+  assert.equal(app.engine.starts, 0);
+});
+
+test('does not offer autostart for unknown profiles or render invalid saved identities', () => {
+  const app = setup(undefined, undefined, false, { [AUTOSTART_STORAGE_KEY]: '["<img src=x onerror=alert(1)>"]' }, '/live');
+  assert.equal(app.controls.get('autostart-current')!.disabled, true);
+  assert.equal(app.controls.get('autostart-list')!.children.length, 0);
+  app.controls.get('autostart-current')!.events.dispatch('click', {});
+  assert.equal(app.engine.starts, 0);
+});
+
+test('Pause stops an automatically started or unavailable engine on the first click', () => {
+  for (const status of ['running', 'unavailable'] as const) {
+    const app = setup();
+    app.engine.status = status;
+    app.widget.refresh();
+    app.elementEvents.dispatch('click', {});
+    assert.equal(app.engine.starts, 0);
+    assert.equal(app.engine.stops, 1);
+    assert.equal(app.engine.status, 'stopped');
+  }
 });

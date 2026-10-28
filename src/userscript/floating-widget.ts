@@ -1,6 +1,7 @@
 import type { EngineStatus } from '../autolike/click-engine.ts';
 import type { AutolikeCore, StorageAdapter } from '../autolike/contract.ts';
 import type { RegularMode } from '../autolike/config.ts';
+import { liveProfile, readAutostartProfiles, saveAutostartProfiles } from './autostart.ts';
 
 export interface WidgetPosition {
   left: number;
@@ -155,7 +156,13 @@ export class FloatingWidget {
       <select data-widget-control data-widget-mode aria-label="Autolike mode">${VISIBLE_MODES.map(value => `<option value="${value}"${value === this.mode ? ' selected' : ''}>${value[0].toUpperCase()}${value.slice(1)}</option>`).join('')}</select>
     </div>
     <button type="button" data-widget-control data-widget-settings-toggle aria-expanded="false" style="margin-top:8px;width:100%">Settings</button>
-    <div data-widget-settings><div data-widget-settings-content><div style="padding-top:8px;opacity:.8">Choose a mode above to tune click pacing.</div></div></div>
+    <div data-widget-settings><div data-widget-settings-content><div style="padding-top:8px;opacity:.8">
+      Choose a mode above to tune click pacing.
+      <p>Autostart profiles (next live entry)</p>
+      <button type="button" data-widget-control data-widget-autostart-current></button>
+      <div data-widget-autostart-list></div>
+      <p data-widget-autostart-message role="status" aria-live="polite"></p>
+    </div></div></div>
     <div data-widget-stats style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:8px;opacity:.85">
       <span>Total <b data-widget-stat="total">0</b></span><span>Success <b data-widget-stat="success">0</b></span>
       <span>Failure <b data-widget-stat="failure">0</b></span><span>Skips <b data-widget-stat="skips">0</b></span>
@@ -182,6 +189,9 @@ export class FloatingWidget {
     this.control('[data-widget-mode]')?.addEventListener?.('change', this.onModeChange);
     this.control('[data-widget-settings-toggle]')?.addEventListener?.('click', this.onSettingsToggle);
     this.control('[data-widget-collapse]')?.addEventListener?.('click', this.onCollapse);
+    this.control('[data-widget-autostart-current]')?.addEventListener?.('click', this.onAutostartCurrent);
+    this.control('[data-widget-autostart-list]')?.addEventListener?.('click', this.onAutostartRemove);
+    this.renderAutostart();
     try { this.collapsed = options.storage?.getItem(COLLAPSED_STORAGE_KEY) === 'true'; } catch { /* Storage may be unavailable. */ }
     this.applyCollapsed();
     this.intervalId = this.timer.setInterval(() => this.refresh(), options.updateInterval ?? 1000);
@@ -203,6 +213,8 @@ export class FloatingWidget {
     this.control('[data-widget-mode]')?.removeEventListener?.('change', this.onModeChange);
     this.control('[data-widget-settings-toggle]')?.removeEventListener?.('click', this.onSettingsToggle);
     this.control('[data-widget-collapse]')?.removeEventListener?.('click', this.onCollapse);
+    this.control('[data-widget-autostart-current]')?.removeEventListener?.('click', this.onAutostartCurrent);
+    this.control('[data-widget-autostart-list]')?.removeEventListener?.('click', this.onAutostartRemove);
     if (this.intervalId !== null) this.timer.clearInterval(this.intervalId);
     this.intervalId = null; this.drag = null; this.element.remove();
   }
@@ -218,7 +230,7 @@ export class FloatingWidget {
     this.element.style.right = 'auto'; this.element.style.bottom = 'auto';
   }
   private onToggle = (): void => {
-    this.running = !this.running;
+    this.running = this.engineStatus() === 'stopped';
     if (this.running) this.options.engine?.start(); else this.options.engine?.stop();
     this.refresh();
   };
@@ -229,6 +241,51 @@ export class FloatingWidget {
       this.options.engine?.setMode(value);
       save(this.options.storage, AUTOLIKE_MODE_STORAGE_KEY, value);
     }
+  };
+  private renderAutostart(): void {
+    const profiles = readAutostartProfiles(this.options.storage);
+    const current = liveProfile(this.options.window.location.pathname);
+    const button = this.control('[data-widget-autostart-current]') as HTMLButtonElement | null;
+    if (button) {
+      button.disabled = current === null;
+      button.textContent = current
+        ? `${profiles.includes(current) ? 'Remove' : 'Add'} @${current}`
+        : 'Open a creator live to add a profile';
+    }
+    const list = this.control('[data-widget-autostart-list]');
+    if (!list) return;
+    list.replaceChildren();
+    for (const profile of profiles) {
+      const remove = this.options.document.createElement('button');
+      remove.type = 'button';
+      remove.setAttribute('data-widget-control', '');
+      remove.setAttribute('data-autostart-remove', profile);
+      remove.textContent = `Remove @${profile}`;
+      list.appendChild(remove);
+    }
+    this.onResize();
+  }
+  private updateAutostart(profiles: string[]): void {
+    const message = this.control('[data-widget-autostart-message]');
+    try {
+      saveAutostartProfiles(this.options.storage, profiles);
+      this.renderAutostart();
+      if (message) message.textContent = 'Saved. Changes apply on the next live entry.';
+    } catch {
+      if (message) message.textContent = 'Could not save autostart profiles. Storage is unavailable; try again.';
+    }
+    this.onResize();
+  }
+  private onAutostartCurrent = (): void => {
+    const profile = liveProfile(this.options.window.location.pathname);
+    if (!profile) return;
+    const profiles = readAutostartProfiles(this.options.storage);
+    this.updateAutostart(profiles.includes(profile) ? profiles.filter(value => value !== profile) : [...profiles, profile]);
+  };
+  private onAutostartRemove = (event: Event): void => {
+    const button = (event.target as Element | null)?.closest?.('[data-autostart-remove]');
+    const profile = button?.getAttribute('data-autostart-remove');
+    if (profile) this.updateAutostart(readAutostartProfiles(this.options.storage).filter(value => value !== profile));
   };
   private onCollapse = (): void => {
     this.collapsed = !this.collapsed;
@@ -287,7 +344,7 @@ export class FloatingWidget {
     return status === 'unavailable' ? 'Unavailable' : status === 'running' ? 'Running' : 'Stopped';
   }
 
-  private refresh(): void {
+  refresh(): void {
     if (this.destroyed) return;
     const status = this.control('[data-widget-status]');
     const toggle = this.control('[data-widget-toggle]');

@@ -15,13 +15,13 @@ and occasional multi-taps. The module intentionally excludes UI, userscript
 metadata, page bootstrap, and other runtime-specific concerns.
 
 The Tampermonkey adapter lives separately at `src/userscript/index.ts`. It
-provides DOM and timer adapters, starts the engine on TikTok live pages, and
-mounts the draggable floating module widget.
+provides DOM and timer adapters and mounts the draggable floating module widget
+on TikTok live pages. **Autolike stays stopped by default**; select **Resume** to
+start it manually.
 
-The widget currently provides the Autolike module with pause/resume, mode
-selection, live counters, an expandable settings area, and TikTok-inspired
-cyan/pink accents. Its position, active module, and collapsed state are persisted in
-`localStorage`; drag it to any visible position and reload the page to restore it.
+The widget provides pause/resume, mode selection, live counters, and expandable
+**Settings**, with TikTok-inspired cyan/pink accents. Its position, selected mode,
+active module, and collapsed state are persisted in `localStorage`.
 
 #### Compact panel
 
@@ -29,6 +29,26 @@ Select **Collapse** to hide the mode selector, settings, and counters while keep
 the name, status, and pause/resume control visible. Select **Expand** to restore
 the details. Collapsing does not pause or start autolike; the panel is kept inside
 the viewport when its size changes.
+
+#### Automatic start for selected profiles
+
+1. Open a creator live page, such as `https://www.tiktok.com/@creator/live`.
+2. Open **Settings** and select **Add @creator**.
+3. Leave the live and enter it again. Autolike starts with your saved mode.
+
+Adding a profile never starts the current session. **Pause** keeps it stopped for
+that visit, including hash/query changes and same-path navigation events. Leaving
+and entering an allowlisted live again permits another automatic start. Switching
+to a different live creates a fresh session with fresh counters.
+
+Settings lists saved profiles with **Remove** controls; removing one affects the
+next entry and does not stop the current session. Profiles are matched
+case-insensitively from `/@creator/live` (an optional trailing slash is supported).
+Generic `/live` pages have no known profile and never start automatically.
+
+The allowlist is stored locally in this browser, not in your TikTok account.
+Invalid or unreadable saved data cannot enable automatic start. If saving fails,
+Settings shows an error instead of claiming the profile was saved.
 
 ## Development and build
 
@@ -52,8 +72,9 @@ changes, then install or update the generated file in Tampermonkey:
 1. Open Tampermonkey and choose **Create a new script**.
 2. Replace the editor contents with `dist/tiktok-enhanced.user.js`.
 3. Save the script and enable it.
-4. Open a TikTok live page (`https://www.tiktok.com/@creator/live`) to run it.
-5. Use the floating Autolike widget to pause/resume, change modes, and open settings.
+4. Open a TikTok live page (`https://www.tiktok.com/@creator/live`) to show the widget.
+5. Select **Resume** to start, or open **Settings** to allow automatic start on
+   future visits. Use **Collapse** for a compact panel.
 
 The userscript uses `@grant none` and does not include the upstream UI or
 userscript wholesale.

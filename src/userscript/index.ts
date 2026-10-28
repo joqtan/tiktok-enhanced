@@ -15,6 +15,7 @@ import { DEBUG_CONFIG_DEFAULTS } from '../autolike/config.ts';
 import type { DetectorEnvironment, LikeButtonElement, SearchRoot } from '../autolike/detector.ts';
 import { createFloatingWidget, type FloatingWidget } from './floating-widget.ts';
 import { createSessionScope, type SessionScope } from './session-scope.ts';
+import { liveProfile, readAutostartProfiles } from './autostart.ts';
 
 /** Return whether a TikTok pathname represents a live stream page. */
 export function isLivePath(pathname: string): boolean {
@@ -60,6 +61,7 @@ export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
   let activeEngine: AutoLikeEngine | null = null;
   let activeWidget: FloatingWidget | null = null;
   let activeScope: SessionScope | null = null;
+  let activePath: string | null = null;
   let installed = false;
   let originalPushState: typeof options.window.history.pushState | null = null;
   let originalReplaceState: typeof options.window.history.replaceState | null = null;
@@ -78,11 +80,14 @@ export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
     activeScope = null;
     activeEngine = null;
     activeWidget = null;
+    activePath = null;
     scope?.dispose();
   }
 
   function start(): AutoLikeEngine | null {
-    if (!isLivePath(options.window.location.pathname)) { destroy(); return null; }
+    const pathname = options.window.location.pathname;
+    if (!isLivePath(pathname)) { destroy(); return null; }
+    if (activePath === pathname && activeEngine) return activeEngine;
     destroy();
     const scope = createSessionScope();
     const engine = createEngine();
@@ -93,8 +98,15 @@ export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
       activeScope = scope;
       activeEngine = engine;
       activeWidget = widget;
+      activePath = pathname;
+      const profile = liveProfile(pathname);
+      if (profile && readAutostartProfiles(getStorage(options.window)).includes(profile)) {
+        engine.start();
+        widget.refresh();
+      }
       return engine;
     } catch (error) {
+      destroy();
       scope.dispose();
       throw error;
     }
