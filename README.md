@@ -1,5 +1,7 @@
 # TikTok Enhanced
 
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://www.conventionalcommits.org/en/v1.0.0/)
+
 TikTok Enhanced is a modular TypeScript project for improving the TikTok live
 stream experience. The repository is designed to host multiple independent
 features rather than a single userscript implementation.
