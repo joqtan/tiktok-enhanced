@@ -36,6 +36,7 @@ test('hardens live navigation through pushState, replaceState, and popstate', ()
   const sessions: Array<{ starts: number; stops: number; destroyed: number; statistics: { totalClicks: number } }> = [];
   const runtime = createAutolikeRuntime({
     window: window as never, document: {} as Document,
+    createLayout: () => ({ destroy: () => {} }),
     createEngine: () => {
       const session = { starts: 0, stops: 0, destroyed: 0, statistics: { totalClicks: 0 } };
       sessions.push(session);
@@ -78,6 +79,7 @@ for (const saved of ['["alice"]', '["ALICE"]', '[]', '{bad', '{}', '["alice",42]
     const runtime = createAutolikeRuntime({
       window: { location, localStorage: { getItem: () => saved } } as never,
       document: {} as Document,
+      createLayout: () => ({ destroy: () => {} }),
       createEngine: () => ({ start: () => { starts++; order.push('start'); }, stop: () => {} }) as never,
       createWidget: () => { order.push('widget'); return { destroy: () => {}, refresh: () => {} } as never; },
     });
@@ -118,6 +120,7 @@ test('manual pause survives same-path history and hash events until the next ent
     addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events) };
   const cleanup: string[] = [];
   const runtime = createAutolikeRuntime({ window: window as never, document: {} as Document,
+    createLayout: () => ({ destroy: () => { cleanup.push('layout'); } }),
     createEngine: () => {
       const engine = { status: 'stopped', starts: 0, stops: 0,
         start: () => { engine.starts++; engine.status = 'running'; },
@@ -136,10 +139,38 @@ test('manual pause survives same-path history and hash events until the next ent
   assert.equal(engines[0].status, 'stopped');
   cleanup.length = 0;
   window.history.pushState({}, '', '/@bob/live');
-  assert.deepEqual(cleanup, ['stop', 'destroy']);
+  assert.deepEqual(cleanup, ['stop', 'destroy', 'layout']);
   assert.equal(engines.length, 2);
   assert.equal(engines[1].starts, 1);
   runtime.destroy(); runtime.uninstall();
   assert.equal(events.count('hashchange'), 0);
   assert.equal(events.count('popstate'), 0);
+});
+
+test('layout sessions are live-only and prior resources are disposed when layout construction fails', () => {
+  const location = { pathname: '/video/1' };
+  const events: string[] = [];
+  const runtime = createAutolikeRuntime({
+    window: { location } as never, document: {} as Document,
+    createEngine: () => ({ stop: () => events.push('stop') }) as never,
+    createWidget: () => ({ destroy: () => events.push('widget') }) as never,
+    createLayout: () => { events.push('layout'); return { destroy: () => events.push('layout destroy') }; },
+  });
+  runtime.start();
+  assert.deepEqual(events, []);
+  location.pathname = '/@a/live'; runtime.start(); runtime.sync();
+  assert.deepEqual(events, ['layout']);
+  location.pathname = '/@b/live'; runtime.sync();
+  assert.deepEqual(events, ['layout', 'stop', 'widget', 'layout destroy', 'layout']);
+  location.pathname = '/video/1'; runtime.sync(); runtime.destroy();
+  assert.deepEqual(events.slice(-3), ['stop', 'widget', 'layout destroy']);
+
+  const failed = createAutolikeRuntime({
+    window: { location: { pathname: '/live' } } as never, document: {} as Document,
+    createEngine: () => ({ stop: () => events.push('failed stop') }) as never,
+    createWidget: () => ({ destroy: () => events.push('failed widget') }) as never,
+    createLayout: () => { throw new Error('layout failed'); },
+  });
+  assert.throws(() => failed.start(), /layout failed/);
+  assert.deepEqual(events.slice(-2), ['failed stop', 'failed widget']);
 });

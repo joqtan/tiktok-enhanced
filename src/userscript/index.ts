@@ -18,6 +18,7 @@ import type { DetectorEnvironment, LikeButtonElement, SearchRoot } from '../auto
 import { createFloatingWidget, type FloatingWidget } from './floating-widget.ts';
 import { createSessionScope, type SessionScope } from './session-scope.ts';
 import { liveProfile, readAutostartProfiles } from './autostart.ts';
+import { createLiveLayout, type LiveLayout } from '../live-layout/index.ts';
 
 /** Return whether a TikTok pathname represents a live stream page. */
 export function isLivePath(pathname: string): boolean {
@@ -53,6 +54,7 @@ export interface AutolikeRuntimeOptions {
   document: Document;
   createEngine?: () => AutoLikeEngine;
   createWidget?: (engine: AutoLikeEngine) => FloatingWidget;
+  createLayout?: () => LiveLayout;
 }
 
 /**
@@ -97,6 +99,8 @@ export function createAutolikeRuntime(options: AutolikeRuntimeOptions) {
     try {
       const widget = createWidget(engine);
       scope.add(() => widget.destroy());
+      const layout = (options.createLayout ?? (() => createLiveLayout({ document: options.document })))();
+      scope.add(() => layout.destroy());
       activeScope = scope;
       activeEngine = engine;
       activeWidget = widget;

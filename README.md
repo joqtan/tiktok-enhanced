@@ -53,6 +53,13 @@ The allowlist is stored locally in this browser, not in your TikTok account.
 Invalid or unreadable saved data cannot enable automatic start. If saving fails,
 Settings shows an error instead of claiming the profile was saved.
 
+### Live panel visibility
+
+On a live page, use the chevron at the navigation or chat edge to hide that
+panel. Use its remaining edge button to show it again. The controls are
+independent of Autolike and each other. Visibility resets when you leave the
+live; it is not saved between visits.
+
 ## Install and update
 
 Install the [latest userscript](https://github.com/joqtan/tiktok-enhanced/releases/latest/download/tiktok-enhanced.user.js)

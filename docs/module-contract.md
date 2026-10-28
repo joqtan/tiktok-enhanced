@@ -23,6 +23,14 @@ constructs another layer's platform details.
    live route destroys both; entering a live route creates a fresh pair and
    therefore route-scoped statistics.
 
+## Live layout
+
+`src/live-layout` owns transient navigation and chat visibility controls on panel
+edges. It does not depend on Autolike, its widget, or its storage. The runtime
+creates one layout controller per live session and disposes it when the route
+changes or the session is destroyed. Its scoped styles and controls are removed
+without replacing site panels; panel visibility starts fresh on the next live.
+
 ## Contract rules
 
 - Keep core logic browser-independent and inject side effects.
