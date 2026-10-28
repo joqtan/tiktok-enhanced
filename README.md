@@ -25,10 +25,11 @@ active module, and collapsed state are persisted in `localStorage`.
 
 #### Compact panel
 
-Select **Collapse** to hide the mode selector, settings, and counters while keeping
-the name, status, and pause/resume control visible. Select **Expand** to restore
-the details. Collapsing does not pause or start autolike; the panel is kept inside
-the viewport when its size changes.
+Select the small **up-chevron** button (tooltip: **Collapse panel**) to hide the
+mode selector, settings, and counters while keeping the name, status, and
+pause/resume control visible. Select the **down-chevron** (tooltip: **Expand
+panel**) to restore the details. Collapsing does not pause or start autolike;
+the panel is kept inside the viewport when its size changes.
 
 #### Automatic start for selected profiles
 
@@ -90,7 +91,7 @@ changes, then install or update the generated file in Tampermonkey:
 3. Save the script and enable it.
 4. Open a TikTok live page (`https://www.tiktok.com/@creator/live`) to show the widget.
 5. Select **Resume** to start, or open **Settings** to allow automatic start on
-   future visits. Use **Collapse** for a compact panel.
+   future visits. Use the up-chevron button for a compact panel.
 
 The userscript uses `@grant none` and does not include the upstream UI or
 userscript wholesale.

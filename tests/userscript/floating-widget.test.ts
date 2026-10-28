@@ -197,7 +197,13 @@ test('destroy removes listeners, timer, and element', () => {
 
 test('collapses details without changing execution and persists the preference', () => {
   const app = setup();
-  app.controls.get('collapse')!.events.dispatch('click', {});
+  const toggle = app.controls.get('collapse')!;
+  assert.equal(toggle.attributes.get('aria-label'), 'Collapse panel');
+  assert.equal(toggle.attributes.get('title'), 'Collapse panel');
+  assert.match(app.widget.element.innerHTML, /data-widget-collapse[^>]*>[\s\S]*?<svg[^>]*width="14"[^>]*aria-hidden="true"/);
+  toggle.events.dispatch('click', {});
+  assert.equal(toggle.attributes.get('aria-label'), 'Expand panel');
+  assert.equal(toggle.attributes.get('title'), 'Expand panel');
   assert.equal(app.controls.get('stats')!.hidden, true);
   assert.equal(app.controls.get('settings')!.hidden, true);
   assert.equal(app.controls.get('collapse')!.attributes.get('aria-expanded'), 'false');
@@ -207,6 +213,10 @@ test('collapses details without changing execution and persists the preference',
   app.controls.get('collapse')!.events.dispatch('click', {});
   assert.equal(app.controls.get('stats')!.hidden, false);
   assert.equal(app.controls.get('collapse')!.attributes.get('aria-expanded'), 'true');
+  assert.equal(toggle.attributes.get('aria-label'), 'Collapse panel');
+  assert.equal(toggle.attributes.get('title'), 'Collapse panel');
+  assert.match(app.widget.element.innerHTML, /\[data-widget-collapse\]\[aria-expanded="false"\] svg \{ transform:rotate\(180deg\); \}/);
+  assert.doesNotMatch(app.widget.element.innerHTML, /data-widget-collapse[^>]*>\s*(?:Collapse|Expand)/);
   app.widget.destroy();
   assert.equal(app.controls.get('collapse')!.events.count('click'), 0);
 });
@@ -216,7 +226,8 @@ test('restores collapsed state and clamps expansion without starting a drag from
     'tiktok-enhanced:floating-widget-collapsed': 'true',
   });
   assert.equal(app.controls.get('stats')!.hidden, true);
-  assert.equal(app.controls.get('collapse')!.textContent, 'Expand');
+  assert.equal(app.controls.get('collapse')!.attributes.get('aria-label'), 'Expand panel');
+  assert.equal(app.controls.get('collapse')!.attributes.get('title'), 'Expand panel');
   app.element.offsetHeight = 200;
   app.controls.get('collapse')!.events.dispatch('click', {});
   assert.deepEqual(app.widget.getPosition(), { left: 200, top: 100 });

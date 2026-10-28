@@ -12,6 +12,15 @@ UI, and runtime entry points.
 - Use pnpm exclusively.
 - Do not introduce npm or Yarn lockfiles.
 
+## Commit messages
+
+- All commits in this repository must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+  ([specification repository](https://github.com/conventional-commits/conventionalcommits.org)).
+- Use `<type>[optional scope][!]: <description>`, with an optional body and footers.
+- Use `feat` for new features and `fix` for bug fixes; choose an appropriate type
+  such as `docs`, `test`, `refactor`, or `chore` for other changes.
+- Mark breaking changes with `!` or a `BREAKING CHANGE:` footer as specified.
+
 ## TypeScript
 
 - Use strict TypeScript.

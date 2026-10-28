@@ -139,6 +139,8 @@ export class FloatingWidget {
       [data-widget-toggle] { background:#fe2c55; border-color:#fe2c55; color:#fff; font-weight:600; }
       [data-widget-toggle]:hover, [data-widget-toggle]:focus-visible { background:#ff5577; border-color:#ff5577; color:#fff; }
       [data-widget-mode] { min-width:92px; }
+      [data-widget-collapse] { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; flex-shrink:0; }
+      [data-widget-collapse][aria-expanded="false"] svg { transform:rotate(180deg); }
       [data-widget-settings-content] { color:#b8b8c2; }
       [data-widget-stats] { color:#aaaab5; line-height:1.5; }
       [data-widget-stats] > span { white-space:nowrap; font-size:11px; }
@@ -146,7 +148,9 @@ export class FloatingWidget {
       @media (prefers-reduced-motion: reduce) { [data-widget-settings-content], [data-widget-stat], [data-widget-settings].is-expanded [data-widget-settings-content] { transition:none; } }
     </style>
     <div data-drag-handle style="display:flex;align-items:center;justify-content:space-between;font-weight:700;cursor:grab">TikTok Enhanced
-      <button type="button" data-widget-control data-widget-collapse aria-label="Collapse panel" aria-expanded="true">Collapse</button>
+      <button type="button" data-widget-control data-widget-collapse aria-label="Collapse panel" title="Collapse panel" aria-expanded="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 14 12 8 18 14" /></svg>
+      </button>
     </div>
     <div data-widget-module style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
       <span data-widget-module-entry aria-current="true">Autolike</span><span data-widget-status style="opacity:.8">${this.engineStatusLabel()}</span>
@@ -302,9 +306,10 @@ export class FloatingWidget {
     }
     const toggle = this.control('[data-widget-collapse]');
     if (toggle) {
-      toggle.textContent = this.collapsed ? 'Expand' : 'Collapse';
+      const label = this.collapsed ? 'Expand panel' : 'Collapse panel';
       toggle.setAttribute('aria-expanded', String(!this.collapsed));
-      toggle.setAttribute('aria-label', this.collapsed ? 'Expand panel' : 'Collapse panel');
+      toggle.setAttribute('aria-label', label);
+      toggle.setAttribute('title', label);
     }
     this.onResize();
   }
