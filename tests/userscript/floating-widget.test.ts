@@ -19,10 +19,10 @@ class Events {
   count(name: string): number { return this.listeners.get(name)?.size ?? 0; }
 }
 
-function setup(saved?: string, savedMode?: string, storageFailure = false) {
+function setup(saved?: string, savedMode?: string, storageFailure = false, preferences: Record<string, string> = {}) {
   const documentEvents = new Events();
   const windowEvents = new Events();
-  const values = new Map<string, string>();
+  const values = new Map<string, string>(Object.entries(preferences));
   if (saved !== undefined) values.set('tiktok-enhanced:floating-widget-position', saved);
   if (savedMode !== undefined) values.set(AUTOLIKE_MODE_STORAGE_KEY, savedMode);
   const storage = {
@@ -42,11 +42,20 @@ function setup(saved?: string, savedMode?: string, storageFailure = false) {
     addEventListener: elementEvents.addEventListener.bind(elementEvents),
     removeEventListener: elementEvents.removeEventListener.bind(elementEvents),
   };
+  const controls = new Map<string, ReturnType<typeof makeControl>>();
+  function makeControl() {
+    const events = new Events();
+    const attributes = new Map<string, string>();
+    return { events, textContent: '', hidden: false, attributes,
+      setAttribute: (key: string, value: string) => { attributes.set(key, value); },
+      addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events) };
+  }
+  for (const name of ['collapse', 'settings-toggle', 'settings', 'stats']) controls.set(name, makeControl());
   const element = {
     style: { cssText: '', left: '', top: '', right: '', bottom: '' }, offsetWidth: 190, offsetHeight: 70,
     innerHTML: '', setAttribute: () => {}, addEventListener: elementEvents.addEventListener.bind(elementEvents),
     removeEventListener: elementEvents.removeEventListener.bind(elementEvents), remove: () => { removed = true; },
-    querySelector: (selector: string) => selector === '[data-widget-mode]' ? modeControl : selector === '[data-widget-toggle]' ? toggleControl : ({ textContent: '', setAttribute: () => {} }),
+    querySelector: (selector: string) => controls.get(selector.replace('[data-widget-', '').replace(']', '')) ?? (selector === '[data-widget-mode]' ? modeControl : selector === '[data-widget-toggle]' ? toggleControl : ({ textContent: '', setAttribute: () => {} })),
   };
   let removed = false;
   const document = { body: { appendChild: () => {} }, createElement: () => element,
@@ -67,7 +76,7 @@ function setup(saved?: string, savedMode?: string, storageFailure = false) {
     status: 'stopped' as const, statistics: { stats: { totalClicks: 0, successfulClicks: 0, failedClicks: 0, skippedClicks: 2, retries: 3, multiTaps: 4, combos: 5, currentCombo: 0, maxCombo: 6 } },
   };
   const widget = new FloatingWidget({ document: document as never, window: window as never, storage, timer, engine: engine as never });
-  return { widget, documentEvents, windowEvents, elementEvents, modeControl, storage, values, engine, window, get removed() { return removed; }, get cleared() { return cleared; } };
+  return { widget, controls, element, documentEvents, windowEvents, elementEvents, modeControl, storage, values, engine, window, get removed() { return removed; }, get cleared() { return cleared; } };
 }
 
 const pointer = (pointerId: number, clientX: number, clientY: number) => ({ pointerId, clientX, clientY }) as PointerEvent;
@@ -172,4 +181,38 @@ test('destroy removes listeners, timer, and element', () => {
   assert.equal(app.windowEvents.count('resize'), 0);
   assert.equal(app.cleared, true);
   assert.equal(app.removed, true);
+});
+
+test('collapses details without changing execution and persists the preference', () => {
+  const app = setup();
+  app.controls.get('collapse')!.events.dispatch('click', {});
+  assert.equal(app.controls.get('stats')!.hidden, true);
+  assert.equal(app.controls.get('settings')!.hidden, true);
+  assert.equal(app.controls.get('collapse')!.attributes.get('aria-expanded'), 'false');
+  assert.equal(app.values.get('tiktok-enhanced:floating-widget-collapsed'), 'true');
+  assert.equal(app.engine.starts, 0);
+  assert.equal(app.engine.stops, 0);
+  app.controls.get('collapse')!.events.dispatch('click', {});
+  assert.equal(app.controls.get('stats')!.hidden, false);
+  assert.equal(app.controls.get('collapse')!.attributes.get('aria-expanded'), 'true');
+  app.widget.destroy();
+  assert.equal(app.controls.get('collapse')!.events.count('click'), 0);
+});
+
+test('restores collapsed state and clamps expansion without starting a drag from controls', () => {
+  const app = setup('{"left":200,"top":220}', undefined, false, {
+    'tiktok-enhanced:floating-widget-collapsed': 'true',
+  });
+  assert.equal(app.controls.get('stats')!.hidden, true);
+  assert.equal(app.controls.get('collapse')!.textContent, 'Expand');
+  app.element.offsetHeight = 200;
+  app.controls.get('collapse')!.events.dispatch('click', {});
+  assert.deepEqual(app.widget.getPosition(), { left: 200, top: 100 });
+  app.elementEvents.dispatch('pointerdown', { ...pointer(1, 200, 100), target: { closest: () => ({}) } });
+  app.documentEvents.dispatch('pointermove', pointer(1, 10, 10));
+  assert.deepEqual(app.widget.getPosition(), { left: 200, top: 100 });
+  app.widget.destroy();
+  assert.equal(app.documentEvents.count('pointerup'), 0);
+  assert.equal(app.documentEvents.count('pointercancel'), 0);
+  assert.equal(app.cleared, true);
 });

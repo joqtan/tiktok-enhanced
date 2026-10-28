@@ -27,6 +27,7 @@ export interface FloatingWidgetOptions {
 }
 
 export const FLOATING_WIDGET_STORAGE_KEY = 'tiktok-enhanced:floating-widget-position';
+export const COLLAPSED_STORAGE_KEY = 'tiktok-enhanced:floating-widget-collapsed';
 export const ACTIVE_MODULE_STORAGE_KEY = 'tiktok-enhanced:floating-widget-module';
 export const AUTOLIKE_MODE_STORAGE_KEY = 'tiktok-enhanced:autolike-mode';
 export const VISIBLE_MODES: readonly RegularMode[] = ['calm', 'natural', 'active'];
@@ -105,6 +106,7 @@ export class FloatingWidget {
   private intervalId: unknown = null;
   private destroyed = false;
   private running: boolean;
+  private collapsed = false;
   private mode: RegularMode = 'natural';
   private readonly activeModuleName: 'autolike' = 'autolike';
 
@@ -125,6 +127,7 @@ export class FloatingWidget {
       'user-select:none', 'touch-action:none', 'cursor:grab', 'transition:box-shadow .2s ease',
     ].join(';');
     this.element.innerHTML = `<style>
+      [data-widget-control][hidden], [data-widget-settings][hidden], [data-widget-stats][hidden] { display:none !important; }
       [data-widget-settings-content] { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows .2s ease, opacity .2s ease; }
       [data-widget-settings-content] > div { overflow:hidden; }
       [data-widget-settings].is-expanded [data-widget-settings-content] { grid-template-rows:1fr; opacity:1; }
@@ -141,7 +144,9 @@ export class FloatingWidget {
       [data-widget-stat] { color:#fff; transition:color .2s ease, transform .2s ease; }
       @media (prefers-reduced-motion: reduce) { [data-widget-settings-content], [data-widget-stat], [data-widget-settings].is-expanded [data-widget-settings-content] { transition:none; } }
     </style>
-    <div data-drag-handle style="font-weight:700;cursor:grab">TikTok Enhanced</div>
+    <div data-drag-handle style="display:flex;align-items:center;justify-content:space-between;font-weight:700;cursor:grab">TikTok Enhanced
+      <button type="button" data-widget-control data-widget-collapse aria-label="Collapse panel" aria-expanded="true">Collapse</button>
+    </div>
     <div data-widget-module style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
       <span data-widget-module-entry aria-current="true">Autolike</span><span data-widget-status style="opacity:.8">${this.engineStatusLabel()}</span>
     </div>
@@ -176,6 +181,9 @@ export class FloatingWidget {
     this.control('[data-widget-toggle]')?.addEventListener?.('click', this.onToggle);
     this.control('[data-widget-mode]')?.addEventListener?.('change', this.onModeChange);
     this.control('[data-widget-settings-toggle]')?.addEventListener?.('click', this.onSettingsToggle);
+    this.control('[data-widget-collapse]')?.addEventListener?.('click', this.onCollapse);
+    try { this.collapsed = options.storage?.getItem(COLLAPSED_STORAGE_KEY) === 'true'; } catch { /* Storage may be unavailable. */ }
+    this.applyCollapsed();
     this.intervalId = this.timer.setInterval(() => this.refresh(), options.updateInterval ?? 1000);
     this.refresh();
   }
@@ -194,6 +202,7 @@ export class FloatingWidget {
     this.control('[data-widget-toggle]')?.removeEventListener?.('click', this.onToggle);
     this.control('[data-widget-mode]')?.removeEventListener?.('change', this.onModeChange);
     this.control('[data-widget-settings-toggle]')?.removeEventListener?.('click', this.onSettingsToggle);
+    this.control('[data-widget-collapse]')?.removeEventListener?.('click', this.onCollapse);
     if (this.intervalId !== null) this.timer.clearInterval(this.intervalId);
     this.intervalId = null; this.drag = null; this.element.remove();
   }
@@ -221,6 +230,27 @@ export class FloatingWidget {
       save(this.options.storage, AUTOLIKE_MODE_STORAGE_KEY, value);
     }
   };
+  private onCollapse = (): void => {
+    this.collapsed = !this.collapsed;
+    save(this.options.storage, COLLAPSED_STORAGE_KEY, String(this.collapsed));
+    this.applyCollapsed();
+  };
+  private applyCollapsed(): void {
+    for (const name of ['mode', 'settings-toggle', 'settings', 'stats']) {
+      const control = this.control(`[data-widget-${name}]`);
+      if (control) {
+        control.hidden = this.collapsed;
+
+      }
+    }
+    const toggle = this.control('[data-widget-collapse]');
+    if (toggle) {
+      toggle.textContent = this.collapsed ? 'Expand' : 'Collapse';
+      toggle.setAttribute('aria-expanded', String(!this.collapsed));
+      toggle.setAttribute('aria-label', this.collapsed ? 'Expand panel' : 'Collapse panel');
+    }
+    this.onResize();
+  }
   private onSettingsToggle = (): void => {
     const settings = this.control('[data-widget-settings]');
     const toggle = this.control('[data-widget-settings-toggle]');

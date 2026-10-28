@@ -20,8 +20,15 @@ mounts the draggable floating module widget.
 
 The widget currently provides the Autolike module with pause/resume, mode
 selection, live counters, an expandable settings area, and TikTok-inspired
-cyan/pink accents. Its position and active module are persisted in
+cyan/pink accents. Its position, active module, and collapsed state are persisted in
 `localStorage`; drag it to any visible position and reload the page to restore it.
+
+#### Compact panel
+
+Select **Collapse** to hide the mode selector, settings, and counters while keeping
+the name, status, and pause/resume control visible. Select **Expand** to restore
+the details. Collapsing does not pause or start autolike; the panel is kept inside
+the viewport when its size changes.
 
 ## Development and build
 
