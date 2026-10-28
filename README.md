@@ -86,6 +86,11 @@ pnpm test
 pnpm run build
 ```
 
+Both GitHub Actions workflows use an explicit Ubuntu 24.04 runner baseline.
+The maintained checkout, pnpm setup, and Node setup actions run internally on
+Node.js 24; the project itself remains on Node.js 22 and pnpm 10. Action and
+runner updates are intentional maintenance for the GitHub Actions environment.
+
 The build preserves the TypeScript check and emits exactly:
 
 ```text
