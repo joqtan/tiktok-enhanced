@@ -66,7 +66,7 @@ Install the [latest userscript](https://github.com/joqtan/tiktok-enhanced/releas
 with Tampermonkey enabled, then confirm installation in Tampermonkey. The release
 includes the compiled script; you do not need Node.js or pnpm to install it.
 
-If you previously pasted the script manually, install version **0.2.0** from that
+If you previously pasted the script manually, install version **0.2.0 or newer** from that
 link once to give Tampermonkey the update URLs. Keep the existing script name and
 namespace so Tampermonkey can recognize it as an update. Check that only one copy
 is enabled.
@@ -123,17 +123,18 @@ because both `@updateURL` and `@downloadURL` use GitHub's latest-release URL.
    `src/userscript/index.ts`. Use a higher version than the latest published one.
 2. Run `pnpm test` and `pnpm run build`. Check the version and update URLs at the
    beginning of `dist/tiktok-enhanced.user.js`.
-3. Commit the version change and push the release branch.
-4. Publish the release against that exact commit, attaching the compiled script.
-   For the first release, the commands are:
+3. Commit the version change, integrate it into `main`, and push `main`. Wait
+   for CI to pass for that exact commit. Publishing from another branch requires
+   an explicitly agreed exception.
+4. From the validated `main` commit, publish the release with the freshly built
+   script attached. For example:
 
    ```sh
-   git push -u origin HEAD
-   gh release create v0.2.0 dist/tiktok-enhanced.user.js --repo joqtan/tiktok-enhanced --target "$(git rev-parse HEAD)" --title "v0.2.0" --notes "Add profile autostart, a collapsible panel, and Tampermonkey update support." --latest
+   gh release create v0.3.0 dist/tiktok-enhanced.user.js --repo joqtan/tiktok-enhanced --target "$(git rev-parse HEAD)" --title "v0.3.0" --notes "Add independent LIVE panel controls, compact widget icons, and CI maintenance." --latest
    ```
 
-   For future releases, substitute the new version and release notes. This
-   publishes a tag and release without merging the branch into `main`.
+   For future releases, substitute the new version and release notes. Do not
+   reuse an existing release tag or replace its asset.
 
 5. Confirm the release lists the asset, and that the
    [latest download](https://github.com/joqtan/tiktok-enhanced/releases/latest/download/tiktok-enhanced.user.js)
